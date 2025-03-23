@@ -1,0 +1,100 @@
+[rule]
+description = """
+Identifies the modification of WinInet registry related keys by a process where the creating thread's stack contains
+frames pointing outside any known executable image. This may indicate evasion via process injection.
+"""
+id = "7dca0e22-0e3f-4ed0-ad28-eff5617adf75"
+license = "Elastic License v2"
+name = "Internet Activity from Suspicious Unbacked Memory"
+os_list = ["windows"]
+version = "1.0.16"
+
+query = '''
+registry where process.executable != null and 
+ registry.path : "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\*" and
+ process.thread.Ext.call_stack_summary :
+                  ("ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|kernelbase.dll|Unbacked|kernel32.dll|ntdll.dll",
+                   "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|kernelbase.dll|wininet.dll|ntdll.dll|kernelbase.dll|wininet.dll|Unbacked|*",
+                   "*wininet.dll|Unbacked|kernel32.dll*",
+                   "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|kernelbase.dll|Unbacked|*",
+                   "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|kernelbase.dll|Unbacked",
+                   "ntdll.dll|kernelbase.dll|Unbacked",
+                   "ntdll.dll|iphlpapi.dll|Unbacked",
+                   "ntdll.dll|kernelbase.dll|Unbacked|kernel32.dll|ntdll.dll",
+                   "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|Unbacked",
+                   "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|wininet.dll|Unbacked|ntdll.dll",
+                   "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|Unbacked|kernel32.dll|ntdll.dll",
+                   "ntdll.dll|kernelbase.dll|Unbacked|kernelbase.dll|ntdll.dll|kernel32.dll|ntdll.dll", 
+                   "ntdll.dll|kernelbase.dll|aclayers.dll|wininet.dll|ntdll.dll|kernelbase.dll|wininet.dll|Unbacked") and
+ not process.thread.Ext.call_stack_summary :
+            ("*mscorlib.dll*","*|clr.dll*", "*coreclr.dll*", "*mscoreei.dll*", "*mscoree.dll*", "*system.ni.dll*",
+             "*mscorlib.ni.dll*", "*mscorwks.dll*", "*mscorsvc.dll*", "*system.private.corelib.dll*", "*java.dll|Unbacked*", 
+             "*user32.dll|bdhkm32.dll*", "*wininet.dll|Unbacked|system.core.ni.dll|Unbacked", "*wininet.dll|Unbacked|cmserver.exe|kernel32.dll|ntdll.dll") and
+ not (process.executable : ("?:\\Windows\\System32\\inetsrv\\w3wp.exe",
+                            "?:\\Program Files (x86)\\Lenovo\\VantageService\\*\\LenovoVantageService.exe",
+                            "?:\\Program Files\\Lenovo\\VantageService\\*\\LenovoVantageService.exe") and
+      process.thread.Ext.call_stack_summary : "ntdll.dll|kernelbase.dll|Unbacked") and
+ not process.executable : ("?:\\Program Files (x86)\\Adobe\\Acrobat Reader DC\\Reader\\ADNotificationManager.exe",
+                           "?:\\Program Files\\ByteFence\\ByteFenceScan.exe",
+                           "?:\\Program Files\\Adobe\\Acrobat Reader DC\\Reader\\ADNotificationManager.exe",
+                           "?:\\Program Files (x86)\\Adobe\\Acrobat Reader DC\\Reader\\AdobeCollabSync.exe",
+                           "?:\\Program Files\\Adobe\\Acrobat Reader DC\\Reader\\AdobeCollabSync.exe", 
+                           "?:\\Program Files (x86)\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe", 
+                           "?:\\Program Files (x86)\\Adobe\\Acrobat Reader DC\\Reader\\LogTransport2.exe", 
+                           "?:\\Program Files (x86)\\Common Files\\Adobe\\Adobe Desktop Common\\ADS\\CRWindowsClientService.exe", 
+                           "?:\\Program Files (x86)\\Adobe\\Acrobat DC\\Acrobat\\AdobeCollabSync.exe",
+                           "?:\\Program Files (x86)\\Common Files\\Adobe\\Adobe Desktop Common\\ADS\\Adobe Crash Processor.exe",
+                           "?:\\Program Files (x86)\\Adobe\\Acrobat DC\\Acrobat\\Adobe Crash Processor.exe", 
+                           "?:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\Adobe Crash Processor.exe",
+                           "?:\\Program Files (x86)\\Western Digital\\WD SmartWare\\WDBackupEngine.exe",
+                           "?:\\Windows\\SysWOW64\\Macromed\\Flash\\FlashUtil*.exe", 
+                           "?:\\Windows\\system32\\Macromed\\Flash\\FlashUtil*.exe", 
+                           "?:\\Program Files (x86)\\Romac\\Length Nesting\\LenNest.exe",
+                           "?:\\Program Files (x86)\\Lavasoft\\Web Companion\\Application\\Lavasoft.WCAssistant.WinService.exe", 
+                           "?:\\Program Files (x86)\\Microsoft Dynamics 365 for Operations - Document Routing\\Microsoft.Dynamics.AX.Framework.DocumentRouting.Agent.exe",
+                           "?:\\Program Files (x86)\\JKI\\VI Package Manager\\VI Package Manager.exe",
+                           "?:\\Program Files (x86)\\Schneider Electric\\ION Setup\\ionsetup.exe",
+                           "?:\\Program Files (x86)\\Romac\\PC8.exe",
+                           "?:\\Program Files\\Common Files\\microsoft shared\\VSTO\\??.?\\VSTOInstaller.exe",
+                           "C:\\Comsof\\Comsof Fiber 24.1.?.??\\CopyMinder\\designer.exe.cm64.exe",
+                           "C:\\Mark-10 Software\\MESURgauge Plus\\MESURgauge Plus.exe",
+                           "C:\\Program Files (x86)\\Airwatch\\AgentUI\\TaskScheduler.exe") and
+ not (process.code_signature.subject_name : "Cisco WebEx LLC" and process.executable : "?:\\Users\\*\\AppData\\Local\\WebEx\\webexAppLauncher.exe") and 
+ not (process.code_signature.subject_name : ("GolfNow, LLC", "Pluralsight, LLC", "Blizzard Entertainment, Inc.", "Appgate Cybersecurity, INC.", 
+                                             "Zoom Video Communications, Inc.", "Vertafore, Inc.", "Anatomage, Inc.", "Articulate Global, Inc.", 
+                                             "Lenovo", "Mozilla Corporation", "TurbolabData_ABSKey.pfx", "eVision Holdings, LLC", "Zscaler, Inc.", 
+                                             "March Networks Corporation", "EZLinks Golf LLC", "Prop Modest", "Audit Detective, LLC", "Shanghai Microvirt Software Technology CO., LTD.") and
+      process.code_signature.trusted == true) and
+ not _arraysearch(process.thread.Ext.call_stack, $entry, $entry.symbol_info : "Unbacked*" and
+                  $entry.callsite_trailing_bytes : ("*908b45ac488b55a0c6420c01488b55a0488b8d68ffffff48894a10488d65",
+                                                    "*488b8d70ffffff49894c24104881c4a80000005b5e5f415c",
+                                                    "50528bcb8b03ff50245a58e9ab000000558bec538b5d0ceb07558bec538b5d0856578bcb8b03ff50042be08bfc8d75088bcb8b03ff501c83f8087e068b0683c6",
+                                                    "cc8945fc8b45fcc9c3558bec51ff0ddba50d1ba50d5ba50d9ae20edaa5536fba5a5a96c20e95e20e95c6660fe2944fa50d58a50d9ba50ddba50d1ba50d5ba50d"))
+'''
+
+min_endpoint_version = "8.10.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1055"
+name = "Process Injection"
+reference = "https://attack.mitre.org/techniques/T1055/"
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "8.10.0"

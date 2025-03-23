@@ -1,0 +1,105 @@
+[rule]
+description = """
+Identifies the creation of a process running as SYSTEM and impersonating a Windows core binary privileges. Adversaries
+may create a new process with a different token to escalate privileges and bypass access controls.
+"""
+id = "46de65b8-b873-4ae7-988d-12dcdc6fa605"
+license = "Elastic License v2"
+name = "Potential Privilege Escalation via Token Impersonation"
+os_list = ["windows"]
+reference = [
+    "https://lengjibo.github.io/token/",
+    "https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw",
+]
+version = "1.0.31"
+
+query = '''
+process where event.action == "start" and process.parent.executable != null and
+
+ /* process creation via seclogon */
+ process.parent.Ext.real.pid > 0 and
+
+ /* CreateProcessWithToken and effective parent is a privileged MS native binary used as a target for token theft */
+ user.id : "S-1-5-18"  and
+ process.Ext.effective_parent.executable :
+                ("?:\\Windows\\system32\\*.exe",
+                 "?:\\Windows\\SysWOW64\\*.exe",
+                 "?:\\Windows\\Microsoft.Net\\*.exe",
+                 "?:\\Windows\\servicing\\TrustedInstaller.exe",
+                 "?:\\Program Files\\Microsoft\\*.exe",
+                 "?:\\Program Files (x86)\\Microsoft\\*.exe") and 
+                 
+ not (process.Ext.effective_parent.executable : "?:\\Windows\\System32\\Utilman.exe" and 
+      process.parent.executable : "?:\\Windows\\System32\\Utilman.exe" and process.parent.args : "/debug") and 
+      
+ not (process.executable : ("?:\\Windows\\System32\\WerFault.exe", 
+                            "?:\\Windows\\SysWOW64\\WerFault.exe", 
+                            "?:\\Windows\\System32\\WerFaultSecure.exe",
+                            "?:\\Windows\\SysWOW64\\WerFaultSecure.exe") and process.args : "-u" and process.args : "-p") and 
+                            
+ not process.parent.executable : "?:\\Windows\\System32\\AtBroker.exe" and
+ not (process.executable : "?:\\Windows\\SoftwareDistribution\\Download\\Install\\securityhealthsetup.exe" and 
+      process.parent.executable : "?:\\Windows\\SoftwareDistribution\\Download\\Install\\securityhealthsetup.exe") and 
+ not (process.code_signature.subject_name :
+                            ("philandro Software GmbH", "Freedom Scientific Inc.", "TeamViewer Germany GmbH",
+                             "Projector.is, Inc.", "TeamViewer GmbH", "Cisco WebEx LLC", "TeamViewer", "PURSLANE",
+                             "Tranquil I.T. Systems", "VOICEFIVE, INC.", "AnyDesk Software GmbH", "Zhou Huabing",
+                             "Remote Utilities LLC", "Bayside Computer Systems Inc") and
+      process.code_signature.trusted == true) and
+ not (process.executable : "?:\\windows\\system32\\WerMgr.exe" and process.args : "-datacollectorcreate") and
+ not process.executable : "?:\\Program Files (x86)\\Dolphin\\SnovaMag*\\dol_logon.exe" and
+ not (process.executable : "?:\\Windows\\SoftwareDistribution\\Download\\Install\\securityhealthsetup.exe" and
+      process.Ext.effective_parent.executable : "?:\\Windows\\servicing\\TrustedInstaller.exe" and
+      process.code_signature.subject_name : "Microsoft Windows Publisher" and process.code_signature.trusted == true) and
+ /* ansible exec_wrapper */
+ not (process.name : "powershell.exe" and
+      process.command_line :
+              ("*AkAGUAeABlAGMAXwB3AHIAYQBwAHAAZQByAF8AcwB0AHIALgBTAHAAbABpAHQAKABAACgAIgBgADAAYAAwAGAAMABgADAAIgApA*",
+               "*ABzAHAAbABpAHQAXwBwAGEAcgB0AHMAIAA9ACAAJABlAHgAZQBjAF8AdwByAGEAcABwAGUAcgBfAHMAdAByAC4AUwBwAGwAaQB0*",
+               "*CgAgACAAIAAgAHQAcgBhAHAAIAB7AAoAIAAgACAAIAAgACAAIAAgACQAdwByAGEAcABwAGUAcgBfAHAAYQB0AGgAIAA9ACAAIgA*", 
+               "*JABlAHgAZQBjAF8AdwByAGEAcABwAGUAcgBfAHMAdAByACAAPQAgAFsAUwB5AHMAdABlAG0ALgBDAG8AbgBzAG8AbABlAF0*")) and 
+ not (process.executable : "?:\\WINDOWS\\system32\\osk.exe" and
+      process.parent.executable : ("?:\\WINDOWS\\System32\\WinLogon.exe", "?:\\Windows\\System32\\LogonUI.exe")) and
+ not process.hash.sha256 : ("1e07a7a91451303d5cdac0a1673d581f5f7198fcc08fc79e4332aba6400f55a8",
+                            "f3607f433952cb23d9eb0fc5e31fd0c4079cad3133dc79d149022900d208876c") and
+ not (process.executable : "C:\\Windows\\SoftwareDistribution\\Download\\Install\\SecurityHealthSetup.exe" and
+      process.Ext.effective_parent.executable : "C:\\Windows\\servicing\\TrustedInstaller.exe" and
+      process.code_signature.subject_name == "Microsoft Corporation" and process.code_signature.trusted == true)
+'''
+
+min_endpoint_version = "8.4.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1134"
+name = "Access Token Manipulation"
+reference = "https://attack.mitre.org/techniques/T1134/"
+[[threat.technique.subtechnique]]
+id = "T1134.001"
+name = "Token Impersonation/Theft"
+reference = "https://attack.mitre.org/techniques/T1134/001/"
+
+[[threat.technique.subtechnique]]
+id = "T1134.002"
+name = "Create Process with Token"
+reference = "https://attack.mitre.org/techniques/T1134/002/"
+
+
+
+[threat.tactic]
+id = "TA0004"
+name = "Privilege Escalation"
+reference = "https://attack.mitre.org/tactics/TA0004/"
+
+[internal]
+min_endpoint_version = "8.4.0"

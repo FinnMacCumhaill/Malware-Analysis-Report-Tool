@@ -1,0 +1,76 @@
+[rule]
+description = """
+Identifies when a Microsoft Office process creates an executable file (DLL) and the file is subsequently loaded. An
+adversary may deliver a weaponized Office document to their target that writes and loads malicious modules.
+"""
+id = "a0a82ad6-98ed-4426-abd8-52e7b052e297"
+license = "Elastic License v2"
+name = "Microsoft Office Loaded a Dropped Executable File"
+os_list = ["windows"]
+reference = [
+    "https://www.elastic.co/security-labs/Hunting-for-Suspicious-Windows-Libraries-for-Execution-and-Evasion",
+]
+version = "1.0.31"
+
+query = '''
+sequence by process.entity_id with maxspan=1m
+  [ file where event.action != "deletion" and
+      process.name :
+          ("WINWORD.EXE",
+           "EXCEL.EXE",
+           "POWERPNT.EXE",
+           "MSACCESS.EXE") and
+      (
+        file.extension : ("dll", "cpl", "ocx") or
+        // Match Windows PE files by header data (MZ)
+        file.Ext.header_bytes : "4d5a*"
+      )] by file.path
+  [ library where
+    process.name : ("WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE", "MSACCESS.EXE") and
+    dll.hash.sha256 != null and
+    not (dll.code_signature.trusted == true and dll.path : "?:\\Users\\*\\appdata\\local\\assembly\\*.dll") and
+    not (dll.code_signature.subject_name == "Bloomberg L.P." and dll.code_signature.trusted == true) and
+    not dll.hash.sha256 : ("8f66789803adb34bdce7dd6686c6d53a0d1089ebf998ec3ab2b455da2828fd3c",
+                           "464266dd5656b82acaac189406983e1c9427be6578f6617360c613e5911c2b06",
+                           "2ce237db9ba8d32db3e1fb7301b407e66cf101cc8f37efa32e5e97d40032f75a",
+                           "aa6fd3c1caf2a53d1fba496564dff15d89779bbdf8f132917eec30049adc9678",
+                           "077e534918a6d0ce90ad91b26168d6b838a854f3899ddf0720a38ca31d15102b",
+                           "26815ae316c6fdeb699b722ba9663089590a5aeaee1ec10375d21d814c5f3aec",
+                           "e464f82e4a44064dc00e997b18fb55c22e0f39182dc22e150ef081cd13af01fe",
+                           "b0680c48dd70da998844bb34fb4bb70d95cc7698ebb7443c36be0d393adc14d5",
+                           "3ab00c79bc361e4b10d79f7c9e1b9d4ab9935b5e5a622027700bc278b5eb622d",
+                           "e0a51c0bf8b8563a91aba2b3a473e93c8e2febf6d2db1f0a3aeebd8dd3d8d054",
+                           "2153b80f5d1cb4bce4b01ec7801abb0b0858b644f21ad5f8cb4d7d83c7db151d") and
+    not dll.path : "?:\\Windows\\assembly\\NativeImages_*.dll" and
+    not dll.code_signature.status : ("trusted", "errorExpired", "errorCode_endpoint*") and
+    not dll.pe.imphash : "dae02f32a21e03ce65412f6e56942daa"] by dll.path
+'''
+
+min_endpoint_version = "8.10.0"
+optional_actions = []
+reputation = true
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 1
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1566"
+name = "Phishing"
+reference = "https://attack.mitre.org/techniques/T1566/"
+[[threat.technique.subtechnique]]
+id = "T1566.001"
+name = "Spearphishing Attachment"
+reference = "https://attack.mitre.org/techniques/T1566/001/"
+
+
+
+[threat.tactic]
+id = "TA0001"
+name = "Initial Access"
+reference = "https://attack.mitre.org/tactics/TA0001/"
+
+[internal]
+min_endpoint_version = "8.10.0"

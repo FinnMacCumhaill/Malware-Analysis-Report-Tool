@@ -1,0 +1,65 @@
+[rule]
+description = """
+Identifies a suspicious sequence of files modification where the entropy of the file is set to zero and it's original
+size is still shown as unmodified. This may indicate a data wiping attack behavior.
+"""
+id = "c8776070-eca6-4370-8438-f2b6282615ef"
+license = "Elastic License v2"
+name = "Potential Data wiping Attack Behavior"
+os_list = ["windows"]
+version = "1.0.31"
+
+query = '''
+sequence by process.entity_id with maxspan=1s
+
+  /* a sequence of file mod by same process */
+
+ [file where event.action == "modification" and process.pid != 4 and process.executable != null and 
+  file.Ext.entropy == 0 and file.Ext.header_bytes : "0000000*" and
+  file.extension : ("exe", "dll", "html", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pdf", "txt", "png") and file.size > 10 and
+  not process.executable :
+            ("?:\\Program Files\\*.exe",
+             "?:\\Program Files (x86)\\*.exe",
+             "?:\\Windows\\System32\\spoolsv.exe",
+             "?:\\Windows\\System32\\svchost.exe",
+             "?:\\Windows\\Explorer.exe",
+             "?:\\Program Files (x86)\\Steam\\steamapps\\*.exe",
+             "\\Device\\HarddiskVolume?\\Steam\\steam.exe") and
+  not (process.name : "steam.exe" and file.path : "?:\\Users\\*\\steamapps\\downloading\\*.txt") and
+  not (process.code_signature.subject_name : "Valve Corp." and process.code_signature.trusted == true) and
+  not file.path : "?:\\Program Files (x86)\\Steam\\steamapps\\downloading\\*" and
+  not (file.extension : ("dll", "exe", "txt") and process.executable : "C:\\Windows\\System32\\msiexec.exe")
+  ]
+ [file where event.action == "modification" and
+  file.Ext.entropy == 0 and file.Ext.header_bytes : "0000000*" and
+  file.extension : ("exe", "dll", "html", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pdf", "txt", "png") and file.size > 10]
+ [file where event.action == "modification" and
+  file.Ext.entropy == 0 and file.Ext.header_bytes : "0000000*" and
+  file.extension : ("exe", "dll", "html", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pdf", "txt", "png") and file.size > 10]
+ [file where event.action == "modification" and
+  file.Ext.entropy == 0 and file.Ext.header_bytes : "0000000*" and
+  file.extension : ("exe", "dll", "html", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pdf", "txt", "png") and file.size > 10]
+'''
+
+min_endpoint_version = "8.0.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1485"
+name = "Data Destruction"
+reference = "https://attack.mitre.org/techniques/T1485/"
+
+
+[threat.tactic]
+id = "TA0040"
+name = "Impact"
+reference = "https://attack.mitre.org/tactics/TA0040/"
+
+[internal]
+min_endpoint_version = "8.0.0"

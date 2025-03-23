@@ -1,0 +1,76 @@
+[rule]
+description = """
+Identifies the execution of suspicious processes from the Windows MSSQL service, this may indicate the use of MSSQL
+stored procedures such as xp_cmdshell or the exploitation of SQL injection vulnerabilities to execute malicious commands
+on the host Operating System.
+"""
+id = "547636af-cad2-4be0-a74e-613c7bb86664"
+license = "Elastic License v2"
+name = "Suspicious Execution from MSSQL Service"
+os_list = ["windows"]
+version = "1.0.27"
+
+query = '''
+process where event.action == "start" and
+(
+  /* registry or xp_cmdshell stored procedures */
+ (process.parent.name : "sqlservr.exe" and
+  process.pe.original_file_name in ("cmd.exe", "PowerShell.EXE", "reg.exe")) or
+
+  /* descendant of cmd or powershell */
+  (descendant of [process where event.action == "start" and process.pe.original_file_name in ("cmd.exe", "PowerShell.EXE") and
+   process.parent.name : "sqlservr.exe"] and not process.executable : "?:\\Windows\\System32\\conhost.exe") or
+
+   /* unsigned child of sqlserv */
+  (process.parent.name : "sqlservr.exe" and process.code_signature.trusted != true and
+   not process.executable : ("?:\\Program Files\\*.exe", "?:\\Program Files (x86)\\*.exe") and
+   process.code_signature.status != "errorChaining" and
+   not process.hash.sha256 : "1a9adfd83a88d80377d9060c7e2857964bf24974eae13447678cedca7da3dba8") or
+
+   (process.parent.name : "sqlservr.exe" and (process.name : "vpnbridge.exe" or process.pe.original_file_name : "vpnbridge.exe")) or
+
+   (process.parent.name : "sqlservr.exe" and
+    (process.name : "certutil.exe" or process.pe.original_file_name == "CertUtil.exe") and process.args : "-urlcache") or
+
+   (process.parent.name : "sqlservr.exe" and
+    (process.name : "bitsadmin.exe" or process.pe.original_file_name : "bitsadmin.exe") and
+    process.command_line : ("*download*", "*transfer*", "*create*", "*addfile*", "*SetNotifyCmdLine*"))
+) and
+not process.executable :
+              ("\\Device\\HarddiskVolume?\\MSSQL12.ITSM\\MSSQL\\Binn\\DatabaseMail.exe",
+               "\\Device\\HarddiskVolume?\\MSSQL13.GP\\MSSQL\\Binn\\DatabaseMail.exe",
+               "\\Device\\HarddiskVolume?\\MSSQL13.MSSQLSERVER\\MSSQL\\Binn\\DatabaseMail.exe")
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.001"
+name = "PowerShell"
+reference = "https://attack.mitre.org/techniques/T1059/001/"
+
+[[threat.technique.subtechnique]]
+id = "T1059.003"
+name = "Windows Command Shell"
+reference = "https://attack.mitre.org/techniques/T1059/003/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+
+[internal]
+min_endpoint_version = "7.15.0"

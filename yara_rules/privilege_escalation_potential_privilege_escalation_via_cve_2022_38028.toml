@@ -1,0 +1,52 @@
+[rule]
+description = "Identifies a privilege escalation attempt via exploiting CVE-2022-38028 to hijack the print spooler service execution."
+id = "7a14f660-f85f-44fa-90a7-a31ae0ed5782"
+license = "Elastic License v2"
+name = "Potential privilege escalation via CVE-2022-38028"
+os_list = ["windows"]
+reference = [
+    "https://www.microsoft.com/en-us/security/blog/2024/04/22/analyzing-forest-blizzards-custom-post-compromise-tool-for-exploiting-cve-2022-38028-to-obtain-credentials/",
+]
+version = "1.0.3"
+
+query = '''
+file where file.path : "C:\\*\\Windows\\system32\\DriVerStoRe\\FiLeRePoSiToRy\\*\\MPDW-constraints.js" and
+ not user.id : "S-1-5-18" and
+ not file.path : "C:\\$WINDOWS.~BT\\NewOS\\Windows\\System32\\DriverStore\\FileRepository\\prnms*\\MPDW-constraints.js" and
+ not process.executable : ("C:\\Windows\\System32\\taskhostw.exe",
+                           "C:\\Program Files\\Azure\\StorageSyncAgent\\FileSyncSvc.exe",
+                           "C:\\Program Files (x86)\\IDriveWindows\\id_bglaunch.exe",
+                           "C:\\Program Files (x86)\\IBackupWindows\\ib_bglaunch.exe",
+                           "C:\\Windows\\System32\\SystemSettingsAdminFlows.exe",
+                           "C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe",
+                           "C:\\Program Files\\Microsoft Deployment Toolkit\\Bin\\Microsoft.BDD.Catalog40.exe",
+                           "C:\\$WINDOWS.~BT\\Sources\\SetupHost.exe",
+                           "C:\\Windows\\System32\\cleanmgr.exe")
+'''
+
+min_endpoint_version = "7.16.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1068"
+name = "Exploitation for Privilege Escalation"
+reference = "https://attack.mitre.org/techniques/T1068/"
+
+
+[threat.tactic]
+id = "TA0004"
+name = "Privilege Escalation"
+reference = "https://attack.mitre.org/tactics/TA0004/"
+
+[internal]
+min_endpoint_version = "7.16.0"

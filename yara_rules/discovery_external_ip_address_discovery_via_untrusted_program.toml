@@ -1,0 +1,120 @@
+[rule]
+description = """
+Identifies a dropped unsigned program making a DNS request to a known public IP address lookup web service. Malwares
+tend to perform this action to assess potential targets.
+"""
+id = "dfe28e03-9b0b-47f5-9753-65ed2666663f"
+license = "Elastic License v2"
+name = "External IP Address Discovery via Untrusted Program"
+os_list = ["windows"]
+version = "1.0.39"
+
+query = '''
+sequence by process.entity_id with maxspan=1m
+
+ /* execution of an unsigned PE file followed by dns request to public ip discovery web services */
+
+  [process where event.action == "start" and not user.id : "S-1-5-18" and
+   not process.code_signature.trusted == true and
+   process.executable : ("?:\\Users\\*", "?:\\ProgramData\\*", "?:\\Windows\\Temp\\*", "?:\\Windows\\Tasks\\*") and
+   (process.Ext.relative_file_creation_time <= 300 or process.Ext.relative_file_name_modify_time <= 300) and
+   not process.hash.sha256 :
+                   ("99f9ed0629c5bd62413ecbc670092da217862d21db1e1bea786a4d921289571c",
+                    "e739d08d695cfe2a68d4566c71d756ca25602e4c7e050e93ecbe3cdc7aa44b58",
+                    "f58f2d82bba0477e64f124c9e75523524927dc9c72f60e2b4f00c482cc57313b", 
+                    "37d66cf4990eabe4cfa65e4f73d673a03cbce33d1bdf7b64f0b661f4a0872b9a", 
+                    "7592a2943c2af6b9b84ebd1c8a577fdffdbf867286c8e97d16cc2087637c0ce0", 
+                    "4d7574026cfd3bfb159ed7d4780f9e1462b5e8828a7ed7979a13977e4cd6611e", 
+                    "db2c94936e13eb47fc6bff6ee9c03ee43d0a5bcb4b27df598a00c962b604f641", 
+                    "3637ef7b9ab2b80940572a7e80102bbecb75d862ae4dcf16945cbea3368a3777", 
+                    "c9b49399b3dec9003ae924736f7c947ca2a8821ef31797145a9c241dd91429c1", 
+                    "73277600db6c0586fa2016001dd4a8affdf4a83f194a8afb16956cde0b79b58f", 
+                    "89cd13792d1a14fa965e8e430a40438929de00c00e4afa2e8710b94b9d346852", 
+                    "b19334da610a7ead290419f28bad0e51704aaadfcec56ddccaefdc3097568c18",
+                    "e8d970029133b8aad87ccab772d3acbc039fa392ad8f5a64f48e5921aea16f2c",
+                    "2d13dabb8766483884b13cbe87eb5f80f7c1f25f7692ef718611808d2c0d4a2e",
+                    "ea0c4140fe1f6af856e99fe90af5bd2ebd11f752811f2aa65aee028dbd0406d1",
+                    "c08408c64870d36a9679f11f7d0291116a0cf63a9c3de7c1a90dbeeb21f73c56",
+                    "7cf3535608862868067514741bf859d6f4d9b72ec8c04987e2d1f28a01fe4fd1",
+                    "403ebb78ec10ccbc060cd9bdb5ecd6d6d8565d468017fcaa852ffd1fa610bf83",
+                    "93cd90ef0ba8d8e943591c209ca14b1bf83ff33734328c356ec74c5ae090d437",
+                    "e63ca8cb5b49daac2f3be62065d6b199390ff187aa7d42703e4b14bfa2ec1391",
+                    "1621af8b21a3d3e7c5205e7e6bd6ac6e42affffc8383cb1d3f2811d53379131f",
+                    "bf33445f21aa6f90f1ff6bc243bf54f06b4661ca423d50731a340a3d60264e27",
+                    "d6cb3408f10dfd6c26233daefdba24007fc971e3dd08f4f82a505a721e19fc8b",
+                    "221ce70deba5b82fa9910a2f320078ee1cf773050cffaa98f9c5fbb5b45f45ee",
+                    "268130c19d5b8691990c07f5d133c39a8012d6f1726c8e20f0e5c7071ce9bd5d",
+                    "05eb7332d3711dfdd2a90c7860162e8d1a1d55ef75ba806da40fb98d60edbabd",
+                    "821bd11693bf4b4b2b9f3c196036e1f4902abd95fb26873ea6c43e123b8c9431")]
+  [dns where
+    dns.question.name :
+         (
+          "ip-api.com",
+          "checkip.dyndns.org",
+          "api.ipify.org",
+          "whatismyip.akamai.com",
+          "bot.whatismyipaddress.com",
+          "ifcfg.me",
+          "ident.me",
+          "ipof.in",
+          "ip.tyk.nu",
+          "icanhazip.com",
+          "curlmyip.com",
+          "wgetip.com",
+          "eth0.me",
+          "ipecho.net",
+          "ip.appspot.com",
+          "api.myip.com",
+          "geoiptool.com",
+          "api.2ip.ua",
+          "api.ip.sb",
+          "ipinfo.io",
+          "checkip.amazonaws.com",
+          "wtfismyip.com",
+          "iplogger.*",
+          "freegeoip.net",
+          "freegeoip.app",
+          "ipinfo.io",
+          "geoplugin.net",
+          "myip.dnsomatic.com",
+          "www.geoplugin.net",
+          "api64.ipify.org",
+          "ip4.seeip.org",
+          "*.geojs.io",
+          "*portmap.io",
+          "api.2ip.ua",
+          "api.db-ip.com",
+          "geolocation-db.com",
+          "httpbin.org",
+          "myip.opendns.com",
+          "ipwho.is"
+         )
+         ]
+'''
+
+min_endpoint_version = "8.4.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1016"
+name = "System Network Configuration Discovery"
+reference = "https://attack.mitre.org/techniques/T1016/"
+
+
+[threat.tactic]
+id = "TA0007"
+name = "Discovery"
+reference = "https://attack.mitre.org/tactics/TA0007/"
+
+[internal]
+min_endpoint_version = "8.4.0"

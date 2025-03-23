@@ -1,0 +1,80 @@
+[rule]
+description = """
+Identifies the creation of a scheduled task with suspicious argument such as task path or parent process. This behavior
+is consistent with an adversary attempting to establish persistence.
+"""
+id = "beebd95c-93f4-46d2-a902-053bfe78686b"
+license = "Elastic License v2"
+name = "Suspicious Scheduled Task Creation"
+os_list = ["windows"]
+reference = ["https://docs.microsoft.com/en-us/windows/win32/taskschd"]
+version = "1.0.29"
+
+query = '''
+process where event.action == "start" and
+  process.pe.original_file_name : "schtasks.exe" and
+  not process.Ext.token.integrity_level_name == "system" and
+  process.args : ("/create", "-create") and process.args : "/tr" and
+  not process.command_line : ("*:\\Program Files\\*", "*:\\Program Files (x86)\\*") and
+  not process.Ext.token.integrity_level_name == "system" and
+  (
+   process.args : ("*Users\\Public\\*", "*:\\Windows\\Tasks\\*", "*:\\Windows\\system32\\Tasks\\*") or 
+   
+   (process.args : "minute" and process.args : "/mo" and
+    process.args : ("*\\AppData\\*", "*\\ProgramData\\*", "*Users\\Public\\*")) or
+
+   (process.args : "HIGHEST" and process.args : "ONLOGON" and
+    process.parent.name : ("wmiprvse.exe", "rundll32.exe", "regsvr32.exe") and
+    not process.parent.command_line : "*rundll32*zzzzInvokeManagedCustomActionOutOfProc*") or
+
+   (process.args : ("onlogon", "minute", "onstart", "daily", "once") and
+    process.parent.name : "cmd.exe" and process.parent.command_line : "*schtasks*" and
+    descendant of [process where event.action == "start" and not process.code_signature.trusted == true]) or
+
+   (process.args : ("SYSTEM", "NT AUTHORITY\\SYSTEM") and process.args : "/ru" and
+    process.command_line : ("*vssadmin*Delete*Shadows*", "*wmic*shadowcopy*", "*regsvr32*-s*")) or 
+    
+   process.command_line : ("*comspec*", "*cmd.exe*/c*", "*^*^*^*", "*powershell*", "*http*://*", "*mshta*", "* curl.exe*")
+  ) and 
+  
+  not process.command_line : ("*\\bmx\\* shutdown.exe *", "*powershell.exe*Task*rubrik_vmware*") and
+  not (process.parent.args : "C:\\ProgramData\\Prognos_Scripts\\OneDriveMapper\\OneDriveMapper.ps1" and process.command_line : "*powershell*") and
+  not process.args :  ("'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File C:\\Windows\\TEMP\\rubrik_vmware*\\post-restore.ps1 ",
+                       "'C:\\ProWin22\\32bit\\ProSeriesBackgroundUpdater.exe' -p 'C:\\ProWin22' -y 22 -s Core", 
+                       "C:\\ModentoBridge\\ModentoPowershellProxy\\schedulePSP.bat", 
+                       "C:\\ModentoBridge\\ModentoPowershellProxy\\startProxy.bat", 
+                       "C:\\ModentoBridge_1\\ModentoPowershellProxy\\startProxy.bat", 
+                       "C:\\PROGRA~2\\*\\EXAQUA~1\\DEVELO~1\\EQPERF~1\\Config\\EQPERF~1.BAT")
+'''
+
+min_endpoint_version = "7.15.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1053"
+name = "Scheduled Task/Job"
+reference = "https://attack.mitre.org/techniques/T1053/"
+[[threat.technique.subtechnique]]
+id = "T1053.005"
+name = "Scheduled Task"
+reference = "https://attack.mitre.org/techniques/T1053/005/"
+
+
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+
+[internal]
+min_endpoint_version = "7.15.0"

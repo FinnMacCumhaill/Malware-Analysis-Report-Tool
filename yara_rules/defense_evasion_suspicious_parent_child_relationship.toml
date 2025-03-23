@@ -1,0 +1,123 @@
+[rule]
+description = """
+Identifies Windows programs run with unexpected parent processes, which can indicate masquerading via process hollowing
+or other forms of code injection in an attempt to evade detections that monitor the execution from suspicious locations.
+"""
+id = "18a26e3e-e535-4d23-8ffa-a3cdba56d16e"
+license = "Elastic License v2"
+name = "Suspicious Parent-Child Relationship"
+os_list = ["windows"]
+reference = [
+    "https://www.elastic.co/security-labs/bits-and-bytes-analyzing-bitsloth",
+    "https://www.elastic.co/security-labs/elastic-security-labs-discovers-lobshot-malware",
+    "https://www.elastic.co/security-labs/elastic-security-labs-steps-through-the-r77-rootkit",
+]
+version = "1.0.35"
+
+query = '''
+process where event.action == "start" and
+ process.executable : ("?:\\*", "\\Device\\CdRom*", "\\Device\\Mup\\*", "\\\\*") and
+ process.parent.executable : ("?:\\*", "\\Device\\CdRom*", "\\Device\\Mup\\*", "\\\\*") and
+  (
+   /*
+     suspicious parent processes
+     N.B svchost.exe is covered by ruleId 5b00c9ba-9546-47cc-8f9f-1c1a3e95f65c
+
+    */
+   (process.name : "autochk.exe" and not process.parent.name : "smss.exe") or
+
+   (process.name : ("consent.exe", "RuntimeBroker.exe") and not process.parent.name : ("svchost.exe", "RuntimeBroker.exe") and
+    not process.parent.executable :
+                 ("?:\\Program Files\\ThreatLocker\\threatlockerconsent.exe",
+                  "?:\\Program Files (x86)\\Workplace\\Components\\WorkplaceContainerComponent\\Current\\Workplace Container Helper.exe")) or
+   (process.name : "SearchIndexer.exe" and not process.parent.name : ("services.exe", "SearchIndexer.exe")) or
+   (process.name : "smss.exe" and not process.parent.name : ("System", "smss.exe", "sihost.exe")) or
+   (process.name : "wininit.exe" and not process.parent.name : "smss.exe") or
+   (process.name : ("lsass.exe", "LsaIso.exe") and not process.parent.name : ("wininit.exe", "lsass.exe", "services.exe")) or
+   (process.name : "services.exe" and not process.parent.name : "wininit.exe") or
+   (process.name : "spoolsv.exe" and not process.parent.name : ("services.exe", "spoolsv.exe")) or
+   (process.name : "taskhost.exe" and not process.parent.name : ("services.exe", "svchost.exe")) or
+   (process.name : "taskhostw.exe" and not process.parent.name : ("services.exe", "svchost.exe", "taskhostw.exe")) or
+   (process.name : ("wmiprvse.exe", "wsmprovhost.exe", "winrshost.exe") and not process.parent.name : "svchost.exe") or
+   (process.name : "sihost.exe" and not process.parent.name : ("svchost.exe", "sihost.exe")) or
+   (process.name : ("winlogon.exe", "csrss.exe", "SearchProtocolHost.exe", "fontdrvhost.exe", "userinit.exe", "dwm.exe", "LogonUI.exe", "taskhostw.exe") and
+    (process.parent.executable : ("?:\\Users\\*\\AppData\\*", "?:\\Users\\Public\\*", "?:\\Users\\*\\Downloads\\*", "?:\\ProgramData\\*",
+                                 "?:\\Windows\\Temp\\*", "?:\\Users\\*\\Desktop\\*", "\\Device\\CdRom*", "\\Device\\Mup\\*") or
+     process.parent.name : ("python*", "powershell.exe", "rundll32.exe", "regsvr32.exe"))) or
+
+   /* suspicious child processes */
+   (process.parent.name : "lsass.exe" and not process.name : ("lsass.exe", "WerFaultSecure.exe", "WerFault.exe", "efsui.exe") and
+    not (process.code_signature.subject_name in ("NoMachine S.a.r.l.", "AuthLite, LLC") and process.code_signature.trusted == true) and
+    not process.hash.sha256 : ("bfcb8f057dae3df9c656ec983d165c1571dbb5e19b6310cc0e5f1bff4c063c1e",
+                               "dd1731be5fccca0d15f2c8e4780debc2962e4c434a7a138fff631a6aa0165962",
+                               "67f366015d701dcd609e1f40c6bcbe56e7d2b479ebc4229927e50674769a8ead")) or
+   (process.parent.name : "autochk.exe" and not process.name:("chkdsk.exe", "doskey.exe", "WerFault.exe", "conhost.exe")) or
+   (process.parent.name : "smss.exe" and
+    not process.name : ("autochk.exe", "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe", "setupcl.exe", "WerFault.exe"))
+   )
+   and not process.parent.executable :
+                   ("?:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\AcroCEF\\AcroCEF.exe",
+                    "?:\\Program Files (x86)\\Adobe\\Acrobat DC\\Acrobat\\*\\AcroCEF.exe",
+                    "?:\\Program Files (x86)\\Adobe\\Acrobat Reader DC\\Reader\\AcroCEF\\RdrCEF.exe",
+                    "?:\\Program Files\\Adobe\\Acrobat Reader DC\\Reader\\AcroCEF\\RdrCEF.exe") and
+   not (process.name : "dwm.exe" and process.code_signature.subject_name == "Teramind Inc." and process.code_signature.trusted == true) and
+   not (process.name : "SearchProtocolHost.exe" and process.parent.name : "rundll32.exe" and process.parent.args : "AppXDeploymentExtensions.OneCore.dll,ShellRefresh") and
+   not (process.parent.executable : "?:\\Windows\\System32\\smss.exe" and process.parent.args : "-SpecialSession") and
+   not (process.parent.executable : ("?:\\Program Files\\Sandboxie\\SandboxieDcomLaunch.exe", "?:\\Program Files\\Sandboxie-Plus\\SandboxieDcomLaunch.exe") and process.name : "RuntimeBroker.exe") and
+   not (process.name : ("winlogon.exe", "csrss.exe") and
+        process.parent.executable : "?:\\Users\\*\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe" and
+        process.parent.args : "/client=Personal" and process.parent.args : "/background") and
+   not (process.executable : "?:\\Windows\\System32\\wbem\\WmiPrvSE.exe" and process.args : "/regserver" and
+        process.Ext.token.integrity_level_name : "system") and
+   not (process.name : "consent.exe" and
+        process.parent.executable : "?:\\Program Files (x86)\\Common Files\\Adobe\\Adobe Desktop Common\\ADS\\CRWindowsClientService.exe") and
+   not (process.parent.executable : "?:\\Users\\*\\AppData\\Local\\Microsoft\\EdgeUpdate\\*\\MicrosoftEdgeUpdateCore.exe" and
+        process.executable : "?:\\WINDOWS\\system32\\SearchProtocolHost.exe" and process.command_line : "*UsGthrFltPipeMssGthrPipe*") and
+   not (process.executable : "?:\\Windows\\System32\\SearchProtocolHost.exe" and
+        process.parent.executable : "?:\\Users\\*\\AppData\\Local\\Microsoft\\Teams\\current\\Teams.exe") and
+   not (process.name : "cmd.exe" and process.parent.executable : "?:\\Windows\\System32\\lsass.exe" and
+        process.args : "C:\\AdPasswordSync\\passwd.bat") and
+   not (process.executable :
+                ("?:\\Program Files (x86)\\Tanium\\Tanium Client\\Patch\\tools\\TaniumFileInfo.exe",
+                 "?:\\Program Files (x86)\\VIPRE Business Agent\\UrlInspectAddon.exe") and process.parent.name : "smss.exe") and
+   not (process.parent.name : "lsass.exe" and
+        process.executable : "?:\\Program Files\\McAfee\\Endpoint Encryption Agent\\MfeEpeHost.exe") and
+   not (process.parent.name : "lsass.exe" and process.code_signature.subject_name == "Secure Endpoints Inc." and process.code_signature.trusted == true)
+'''
+
+min_endpoint_version = "7.15.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1036"
+name = "Masquerading"
+reference = "https://attack.mitre.org/techniques/T1036/"
+
+[[threat.technique]]
+id = "T1055"
+name = "Process Injection"
+reference = "https://attack.mitre.org/techniques/T1055/"
+[[threat.technique.subtechnique]]
+id = "T1055.012"
+name = "Process Hollowing"
+reference = "https://attack.mitre.org/techniques/T1055/012/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"

@@ -1,0 +1,59 @@
+[rule]
+description = """
+Detects the execution of a process that should not be executed by the native auval or auvaltool binaries. This activity
+may occur after a threat actor loads a malicious audio unit plug-in via auval or auvaltool providing them unsigned code
+execution in the context of those binaries.
+"""
+id = "c851df2d-2400-4d11-8bc1-55a26b41263f"
+license = "Elastic License v2"
+name = "Abnormal Auval Child Process Execution"
+os_list = ["macos"]
+reference = ["https://posts.specterops.io/audio-unit-plug-ins-896d3434a882"]
+version = "1.0.10"
+
+query = '''
+process where event.type == "start" and (process.parent.name in ("auval", "auvaltool") or
+ process.Ext.effective_parent.name in ("auval", "auvaltool")) and
+ process.name like~ ("curl",
+                    "nscurl", 
+                    "osascript", 
+                    "bash", 
+                    "sh", 
+                    "zsh", 
+                    "python*") and 
+ not process.command_line like ("/Applications/Logic Pro X.app/Contents/MacOS/Logic Pro X", "/Applications/Logic Pro.app/Contents/MacOS/Logic Pro") and
+ not process.Ext.effective_parent.executable like ("/Applications/Logic Pro X.app/Contents/MacOS/Logic Pro X", "/Applications/Logic Pro.app/Contents/MacOS/Logic Pro")
+'''
+
+min_endpoint_version = "8.11.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.004"
+name = "Unix Shell"
+reference = "https://attack.mitre.org/techniques/T1059/004/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+
+[internal]
+min_endpoint_version = "8.11.0"

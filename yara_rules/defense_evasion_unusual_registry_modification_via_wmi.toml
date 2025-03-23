@@ -1,0 +1,81 @@
+[rule]
+description = "Identifies registry modification via Windows Management Instrumentation to point to an executable or script file."
+id = "6a99f6e1-95bb-4d69-8743-23bfce24c7ae"
+license = "Elastic License v2"
+name = "Unusual Registry Modification via WMI"
+os_list = ["windows"]
+version = "1.0.13"
+
+query = '''
+registry where process.executable : "?:\\Windows\\sys*\\wbem\\wmiprvse.exe" and
+ process.code_signature.subject_name : "Microsoft *" and
+ user.id : ("S-1-5-21*", "S-1-12-*") and
+ registry.data.strings : ("*.dll*", "*.exe*", "*.sys", "*rundll32.exe*", "*cscript.exe*", "*wscript.exe", "*powershell.exe*", "*regsvr*", "*Users\\Public\\*", "*mshta*") and
+ not registry.path :
+             ("HKLM\\SOFTWARE\\lansweeper\\Remote Deployment\\*",
+              "HKEY_USERS\\*\\SOFTWARE\\Black Ice Software LLC\\*",
+              "HKLM\\SOFTWARE\\Legato\\NetWorker\\QuietUninstallString",
+              "HKEY_USERS\\*\\Software\\SSPrint\\ssn3m\\AutoConfig_DeviceID",
+              "HKEY_USERS\\*\\Software\\ODBC\\ODBC.INI\\DMG\\Driver",
+              "HKLM\\SYSTEM\\*\\Control\\Session Manager\\PendingFileRenameOperations",
+              "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MDM\\JobDB\\*\\UrlList",
+              "HKLM\\SYSTEM\\ControlSet*\\Services\\EventLog\\*", 
+              "HKLM\\SOFTWARE\\MySoftware\\Capture Printer\\PrintingModule",
+              "HKEY_USERS\\.DEFAULT\\Software\\Microsoft\\Windows\\CurrentVersion\\Group Policy Objects\\{*}Machine\\Software\\Policies\\Microsoft\\Windows\\SrpV2\\Exe\\*\\Value") and
+ not registry.key : ("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Terminal Server\\TSAppAllowList\\Applications\\*",
+                     "*Classes\\Local Settings\\MuiCache\\*",
+                     "*Classes\\SystemFileAssociations\\*",
+                     "*\\Software\\AppDataLow\\Software*",
+                     "SOFTWARE\\WOW6432Node\\Google\\Update\\*",
+                     "*_Classes\\webcatalog-aventri\\*",
+                     "*\\SOFTWARE\\Clients\\StartMenuInternet\\webcatalog-aventri\\*",
+                     "SOFTWARE\\WOW6432Node\\ODBC\\ODBCINST.INI\\Teradata Database ODBC Driver*",
+                     "S-1-5-21-*_Classes\\TypeLib\\{C0529B10-073A-4754-9BB0-72325D80D122}\\1.0\\0\\win32",
+                     "S-1-5-21-*_Classes\\WOW6432Node\\CLSID\\{19A6E644-14E6-4A60-B8D7-DD20610A871D}\\InprocServer32", 
+                     "SYSTEM\\ControlSet*\\Control\\Terminal Server\\WinStations\\RDP-Tcp", 
+                     "*\\DefaulIcon", 
+                     "*Classes\\webcatalog-excalidraw-plus\\shell\\open\\command", 
+                     "S-*\\Software\\Clients\\StartMenuInternet\\webcatalog-excalidraw-plus\\shell\\open\\command", 
+                     "*\\Services\\EventLog\\Application\\Business World*", 
+                     "*\\Services\\EventLog\\Business World*", 
+                     "SYSTEM\\ControlSet*\\Control\\Class\\{4d36e972-e325-11ce-bfc1-08002be10318}\\*", 
+                     "SOFTWARE\\Microsoft\\Internet Explorer\\Low Rights\\ElevationPolicy\\{8096ABF6-3761-4B76-B8E7-6B596AFE07EF}", 
+                     "SOFTWARE\\Microsoft\\Internet Explorer\\Low Rights\\ElevationPolicy\\{791C3483-6F9D-43C8-93CB-F469D9BF1658}") and
+ not (registry.data.strings : "C:\\WINDOWS\\system32\\SQLSRV32.dll" and registry.path : ("HKLM\\SOFTWARE\\ODBC\\*", "HKLM\\SOFTWARE\\WOW6432Node\\ODBC\\*")) and
+ not registry.data.strings : ("@Winlangdb.dll,-*", "?:\\pagefile.sys", "C:\\Program Files\\Windows Media Player\\wmplayer.exe")
+'''
+
+actions = []
+min_endpoint_version = "8.4.0"
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1047"
+name = "Windows Management Instrumentation"
+reference = "https://attack.mitre.org/techniques/T1047/"
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1112"
+name = "Modify Registry"
+reference = "https://attack.mitre.org/techniques/T1112/"
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "8.4.0"

@@ -1,0 +1,58 @@
+[rule]
+description = """
+Identifies binaries that have been identically named to Apple programs and have invalid or untrusted code signatures.
+Adversaries may attempt to manipulate the name of a process to make it appear legitimate or benign.
+"""
+id = "4154c8ce-c718-4641-80db-a6a52276f1a4"
+license = "Elastic License v2"
+name = "Potential Binary Masquerading via Invalid Code Signature"
+os_list = ["macos"]
+version = "1.0.36"
+
+query = '''
+process where event.action == "exec" and
+ process.name like ("com.apple.*", "com.jamf.*", "jamf*") and
+ (process.code_signature.trusted == false or process.code_signature.exists == false) and
+ not (process.code_signature.subject_name in ("Software Signing", "com.apple.WebKit.Networking", "com.apple.WebKit.WebContent") and
+      process.name in
+           ("com.apple.WebKit.WebContent.Development",
+            "com.apple.WebKit.GPU.Development",
+            "com.apple.WebKit.Networking.Development",
+            "com.apple.WebKit.Storage.Development")) and
+ not process.executable like~ ("/usr/local/jamf/bin/jamf", "com.apple.WebKit.Networking.Development", "/Library/Application Support/JAMF/Remote Assist/jamfRemoteAssistLauncher",
+                           "/Library/Application Support/JAMF/Remote Assist/jamfRemoteAssistConnectorUI.app/Contents/MacOS/jamfRemoteAssistConnectorUI",
+                           "/Users/*/Library/Caches/ms-playwright/*") and
+ not process.parent.executable in ("/sbin/launchd", "/Library/Application Support/JAMF/Jamf.app/Contents/MacOS/JamfDaemon.app/Contents/MacOS/JamfDaemon") and
+ not process.Ext.effective_parent.executable in ("/Library/Application Support/JAMF/Jamf.app/Contents/MacOS/JamfDaemon.app/Contents/MacOS/JamfDaemon",
+                                                "/System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd") and
+ not (process.Ext.effective_parent.executable == "/Applications/Visual Studio Code.app/Contents/MacOS/Electron" and process.name == "com.apple.WebKit.WebContent.Development") and
+ not process.code_signature.signing_id == "com.apple.WebKit.WebContent"
+'''
+
+min_endpoint_version = "8.7.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1036"
+name = "Masquerading"
+reference = "https://attack.mitre.org/techniques/T1036/"
+[[threat.technique.subtechnique]]
+id = "T1036.001"
+name = "Invalid Code Signature"
+reference = "https://attack.mitre.org/techniques/T1036/001/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "8.7.0"

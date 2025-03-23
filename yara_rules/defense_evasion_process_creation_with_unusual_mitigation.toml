@@ -1,0 +1,91 @@
+[rule]
+description = """
+Identifies attempts to create a process with Microsoft mitigation policy set prevent loading non Microsoft signed DLLs.
+Adversaries may abuse this feature to prevent loading Endpoint security DLLs that lacks this code signing requirement.
+"""
+id = "d09ce1d0-f961-4eae-906c-22e551a1c3b6"
+license = "Elastic License v2"
+name = "Process Creation with Unusual Mitigation"
+os_list = ["windows"]
+reference = [
+    "https://blog.xpnsec.com/protecting-your-malware/",
+    "https://www.elastic.co/security-labs/pikabot-i-choose-you",
+]
+version = "1.0.16"
+
+query = '''
+process where event.type == "start" and process.executable != null and 
+ process.parent.executable != null and process.Ext.token.integrity_level_name != "low" and
+ process.Ext.mitigation_policies : "Microsoft only" and 
+ (
+  (process.parent.thread.Ext.call_stack_contains_unbacked == true and
+   process.parent.thread.Ext.call_stack_summary :
+               ("ntdll.dll|Unbacked",
+                "ntdll.dll|kernelbase.dll|Unbacked", 
+                "ntdll.dll|kernelbase.dll|kernel32.dll|Unbacked",
+                "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|kernelbase.dll|Unbacked", 
+                "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|kernelbase.dll|kernel32.dll|Unbacked", 
+                "ntdll.dll|wow64.dll|wow64cpu.dll|wow64.dll|ntdll.dll|kernelbase.dll|Unbacked|kernel32.dll|ntdll.dll")) or 
+                
+   process.parent.Ext.real.pid > 0 or 
+
+   (process.parent.thread.Ext.call_stack_summary : "ntdll.dll|*" and 
+    not process.parent.thread.Ext.call_stack_summary : ("*kernelbase.dll*", "*rpcrt4.dll*", "ntdll.dll|tmmon64.dll"))
+ ) and 
+ not (process.Ext.token.integrity_level_name : "system" and 
+      process.executable :
+               ("?:\\ProgramData\\Microsoft\\Windows Defender Advanced Threat Protection\\DataCollection\\*.exe",
+                "\\Device\\HarddiskVolume*\\ProgramData\\Microsoft\\Windows Defender Advanced Threat Protection\\DataCollection\\*.exe")) and
+ not (process.code_signature.subject_name : ("Microsoft Windows Defender Advanced Threat Protection", "Wavesor Software (Eightpoint Technologies Ltd. SEZC)") and 
+      process.code_signature.status : "trusted" and process.Ext.token.integrity_level_name : "system") and 
+ not (process.parent.executable : "?:\\Windows\\System32\\hv*.exe" and process.executable : "?:\\Windows\\System32\\hv*.exe") and 
+ not (process.parent.executable : "?:\\Windows\\System32\\browser_broker.exe" and process.executable : "?:\\Windows\\System32\\browser_broker.exe") and
+ not (process.executable : "?:\\Windows\\System32\\vmwp.exe" and process.parent.executable : "?:\\Windows\\System32\\vmcompute.exe") and 
+ not (process.parent.executable : "?:\\Windows\\System32\\lsass.exe" and process.executable : "?:\\Windows\\system32\\lsass.exe" and 
+      user.id == "S-1-5-18") and
+ not (process.executable : "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" and
+      process.parent.executable : "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe") and
+ not (process.executable : "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" and
+      process.parent.executable : "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe") and
+ not (process.executable : "C:\\Users\\*\\AppData\\Local\\Yandex\\YandexBrowser\\Application\\browser.exe" and
+      process.parent.executable : "C:\\Users\\*\\AppData\\Local\\Yandex\\YandexBrowser\\Application\\browser.exe" and
+      process.code_signature.subject_name == "YANDEX LLC" and process.code_signature.trusted == true) and
+ not (process.executable : "?:\\Windows\\system32\\DllHost.exe" and
+      process.parent.executable : "?:\\Windows\\System32\\dllhost.exe" and
+      process.args : "/Processid:{3EB3C877-1F16-487C-9050-104DBCD66683}" and
+      process.parent.thread.Ext.call_stack_summary : "ntdll.dll|kernel32.dll|ntdll.dll") and
+ not (process.parent.thread.Ext.call_stack_summary : "ntdll.dll|atcuf*.dll|Unbacked" and
+      _arraysearch(process.parent.thread.Ext.call_stack, $entry,
+               $entry.symbol_info : "?:\\Program Files*\\N-able Technologies\\AVDefender\\*.dll!*")) and
+ not (process.executable : "?:\\Windows\\System32\\CastSrv.exe" and process.parent.args : "CCastServerControlInteractiveUser" and
+      process.parent.executable : "?:\\Windows\\System32\\CastSrv.exe") and
+ not _arraysearch(process.parent.thread.Ext.call_stack, $entry, $entry.callsite_trailing_bytes : "8945ac65488b042530000000448ba05012000065488b042530000000448b6868eb0a448b642460448b6c24644d85ff7409498b0748894598eb0448897598448b")
+'''
+
+min_endpoint_version = "8.8.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1562"
+name = "Impair Defenses"
+reference = "https://attack.mitre.org/techniques/T1562/"
+[[threat.technique.subtechnique]]
+id = "T1562.001"
+name = "Disable or Modify Tools"
+reference = "https://attack.mitre.org/techniques/T1562/001/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "8.8.0"

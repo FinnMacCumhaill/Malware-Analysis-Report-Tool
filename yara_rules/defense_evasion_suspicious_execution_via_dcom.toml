@@ -1,0 +1,194 @@
+[rule]
+description = """
+Identifies suspicious execution via the Distributed Component Object Model service. This may indicate an attempt to
+evade detection via suspicious process tree.
+"""
+id = "8f3b570f-afe6-4974-8842-b6ac71cd9ea9"
+license = "Elastic License v2"
+name = "Suspicious Execution via DCOM"
+os_list = ["windows"]
+reference = [
+    "https://www.cybereason.com/blog/dcom-lateral-movement-techniques",
+    "https://codewhitesec.blogspot.com/2018/07/lethalhta.html",
+]
+version = "1.0.38"
+
+query = '''
+sequence with maxspan=1m
+ [process where event.action == "start" and 
+  process.parent.name : "svchost.exe" and
+  (
+   process.Ext.effective_parent.executable : 
+                ("?:\\Users\\*",
+                 "?:\\Windows\\Temp\\*",
+                 "?:\\Windows\\Tasks\\*",
+                 "?:\\ProgramData\\*",
+                 "?:\\Windows\\Microsoft.NET\\*") or
+
+   process.Ext.effective_parent.name : ("powershell.exe", "cscript.exe", "wscript.exe", "rundll32.exe", "regsvr32.exe",
+                                         "mshta.exe", "msbuild.exe", "winword.exe",  "excel.exe", "powerpnt.exe", "outlook.exe",
+                                         "InstallUtil.exe", "Microsoft.Workflow.Compiler.exe", "ScriptRunner.exe", "pwsh.exe", "cmd.exe")
+   ) and
+
+   /* excluding AppInfo WerFault Openwith and Dllhost */
+   not process.executable :
+            ("?:\\Windows\\System32\\WerFault.exe",
+             "?:\\Windows\\SysWOW64\\WerFault.exe",
+             "?:\\Windows\\system32\\OpenWith.exe",
+             "?:\\Windows\\System32\\prevhost.exe",
+             "?:\\Windows\\SysWOW64\\prevhost.exe",
+             "?:\\Windows\\System32\\vdsldr.exe",
+             "?:\\Windows\\SysWOW64\\vdsldr.exe",
+             "?:\\Windows\\System32\\CredentialUIBroker.exe",
+             "?:\\WINDOWS\\System32\\DriverStore\\FileRepository\\*.exe",
+             "?:\\Program Files (x86)\\Dropbox\\Client\\Dropbox.exe", 
+             "?:\\ProgramData\\*\\Microsoft\\Teams\\current\\Teams.exe", 
+             "?:\\*\\AppData\\Local\\Microsoft\\Teams\\current\\Teams.exe", 
+             "?:\\Users\\*\\AppData\\Local\\Microsoft\\OneDrive\\*\\FileCoAuth.exe") and
+   /* excluding AppInfo */
+   not process.parent.Ext.real.pid > 0 and 
+   /* noisy FPs */
+   not (process.name : "rundll32.exe" and
+        process.args : ("?:\\WINDOWS\\system32\\davclnt.dll,DavSetCookie",
+                        "?:\\WINDOWS\\SYSTEM32\\EDGEHTML.dll,#141",
+                        "?:\\Program Files (x86)\\*",
+                        "?:\\Program Files\\*")) and
+
+   not process.hash.sha256 : "f18a9d2e5af55587a3c13edde7a33a235634b2be8b567fa0a195923305e13f09" and
+   not (process.code_signature.trusted == true and not process.code_signature.subject_name : "Microsoft*") and
+   not (process.pe.original_file_name : "msedgeupdate.dll" and process.code_signature.trusted == true)
+   ] by process.entity_id
+  [process where event.action : "start" and
+
+   not process.executable :
+               ("?:\\Program Files (x86)\\*.exe",
+                "?:\\Program Files\\*.exe",
+                "?:\\WINDOWS\\splwow64.exe",
+                "?:\\Windows\\System32\\IESettingSync.exe",
+                "?:\\WINDOWS\\system32\\srtasks.exe",
+                "?:\\Windows\\System32\\WerFault.exe",
+                "?:\\Windows\\SysWOW64\\WerFault.exe",
+                "?:\\Windows\\System32\\DWWIN.EXE",
+                "?:\\Windows\\SysWOW64\\DWWIN.EXE",
+                "?:\\Windows\\system32\\msiexec.exe",
+                "?:\\Windows\\SysWOW64\\msiexec.exe",
+                "?:\\Windows\\Microsoft.NET\\Framework*\\csc.exe",
+                "?:\\Windows\\SysWOW64\\unregmp2.exe",
+                "?:\\WINDOWS\\system32\\verclsid.exe",
+                "?:\\Windows\\system32\\dllhost.exe",
+                "?:\\Windows\\SysWOW64\\dllhost.exe",
+                "?:\\Windows\\System32\\mspaint.exe",
+                "?:\\Windows\\SysWOW64\\mspaint.exe",
+                "?:\\Windows\\System32\\DriverStore\\FileRepository\\*",
+                "?:\\Windows\\System32\\TokenBrokerCookies.exe",
+                "?:\\Windows\\Sys*\\PresentationHost.exe",
+                "?:\\Windows\\System32\\w32tm.exe",
+                "?:\\Windows\\System32\\colorcpl.exe",
+                "?:\\Windows\\SysWOW64\\colorcpl.exe",
+                "?:\\Windows\\SysWOW64\\psr.exe",
+                "?:\\Windows\\System32\\psr.exe",
+                "?:\\Windows\\BrowserCore\\BrowserCore.exe",
+                "?:\\Windows\\System32\\conhost.exe",
+                "?:\\Windows\\System32\\UsoClient.exe",
+                "?:\\Windows\\System32\\mcbuilder.exe",
+                "?:\\Windows\\System32\\mstsc.exe",
+                "?:\\Windows\\System32\\wermgr.exe",
+                "?:\\Users\\*\\AppData\\Local\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe",
+                "?:\\Users\\*\\AppData\\Local\\Microsoft\\EdgeUpdate\\Install\\*\\MicrosoftEdge_X64*.exe",
+                "?:\\Users\\*\\AppData\\Local\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe",
+                "?:\\Users\\*\\AppData\\Local\\Microsoft\\EdgeUpdate\\Install\\*\\MicrosoftEdge_*.exe") and
+
+   not process.parent.executable :
+               ("?:\\Program Files (x86)\\Common Files\\InstallShield\\Engine\\*\\IKernel.exe",
+                "?:\\Program Files\\Common Files\\InstallShield\\Engine\\*\\IKernel.exe",
+                "?:\\Windows\\SysWOW64\\PresentationHost.exe",
+                "?:\\Program Files (x86)\\BL\\BL\\ACTIVEX.OUT.OF.PROCESS\\*.exe", 
+                "?:\\Program Files (x86)\\Minitab\\Minitab *\\Mtb.exe", 
+                "?:\\Program Files (x86)\\Common Files\\InstallShield\\Driver\\*\\IDriver.exe",
+                "?:\\Program Files\\Kerio\\Outlook Connector (Offline Edition)\\KoffBackend.exe") and
+
+   not (process.code_signature.trusted == true and not process.code_signature.subject_name : "Microsoft*") and
+
+   not (process.executable :
+              ("?:\\Users\\*",
+               "?:\\Windows\\System32\\spool\\drivers\\*",
+               "?:\\ProgramData\\") and process.code_signature.trusted == true) and
+
+   not (process.name : ("rundll32.exe", "regsvr32.exe") and
+        process.command_line :
+                ("*windows\\system32\\spool\\DRIVERS\\*MonitorPrintJobStatus*",
+                 "*WINDOWS\\system32\\inetcpl*ClearMyTracksByProcess*",
+                 "*PhotoViewer.dll*ImageView_Fullscreen*",
+                 "*\\Program Files (x86)\\AllesTechnologyAgent\\Super Shield\\SuperShieldHookCpy64.dll*",
+                 "*:\\Windows\\system32\\spool\\DRIVERS\\x64\\3\\*", 
+                 "*\\Windows\\System32\\shell32.dll,Control_RunDLL ?:\\Windows\\System32\\*")) and
+
+   not (process.name : "regsvr32.exe" and process.parent.name : "dllhost.exe" and
+        process.parent.args : "/Processid:{AA0B85DA-FDDF-4272-8D1D-FF9B966D75B0}") and
+
+   not process.hash.sha256 :
+               ("4a06605651958c56e89a468f600c3322e3fdc97c8143bcfd1d8d1ebadb0920fb",
+                "b04266ca05e8125a1544e68c8852f7d44dde9c7e4f3b08a0383c0bf4ab6cfd2d",
+                "ef7d80e4cc017ba0b8ca0cef2956ed762f4a3e8053d2569785bfaf735e9aecb9",
+                "1b71b0b94f70215fa4ed9fe8cf950558eb20413feb54967cade34148ca97793e",
+                "e08a98f79de70175f6bb4c319b70bc13063aa1f03780709393f4f6d498da9c0f",
+                "d0f324e0267f7075e60f896cf064538e8398fb51557d2e1a53f348d39d10c3ac",
+                "1d70bbb5c62a2c27583cd38261c09fdc9c208f6ea96349e535b6c4135c0a8569",
+                "b52ee82c7e579fd73abc31c368462df9d99c6623be91526ee150706286dc19ee", 
+                "a430089ee8c6d119ee90ca586626038d0e1e8b4fbd742440ce5c83d295f2fc46", 
+                "e600ebf1bdada253a31f59a9870b8aa18d9a985c390510bfe9219acb44da406d", 
+                "d539b4957d8c03b6503357df836f1ed92fa37d73e19e0962d83b3dcba507f4bf",
+                "91c176db26a66a0ef8249a43d5ff9ccf76571cd965070baf8e72f96559f28289",
+                "2ec75fa569c0fa92add37c7221d700acd4bd70f5438154695ecccc4fd30b5e60") and
+
+   not (process.pe.original_file_name == "Teams.exe" and
+        process.code_signature.trusted == true and process.code_signature.subject_name : "Microsoft Corporation") and
+
+   not (process.executable : "?:\\Windows\\System32\\conhost.exe" and process.parent.executable : "?:\\Windows\\System32\\sdiagnhost.exe") and
+
+   not (process.parent.name : "dllhost.exe" and process.parent.args : "/Processid:{AA0B85DA-FDDF-4272-8D1D-FF9B966D75B0}") and 
+
+   not (process.name : "rundll32.exe" and process.args : "?:\\Windows\\System32\\dfshim.dll,ShOpenVerbApplication" and 
+        process.parent.command_line : "\"?:\\Program Files\\Internet Explorer\\iexplore.exe\" -startmanager -Embedding")
+   ] by process.parent.entity_id
+'''
+
+min_endpoint_version = "8.4.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 1
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1218"
+name = "System Binary Proxy Execution"
+reference = "https://attack.mitre.org/techniques/T1218/"
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1021"
+name = "Remote Services"
+reference = "https://attack.mitre.org/techniques/T1021/"
+[[threat.technique.subtechnique]]
+id = "T1021.003"
+name = "Distributed Component Object Model"
+reference = "https://attack.mitre.org/techniques/T1021/003/"
+
+
+
+[threat.tactic]
+id = "TA0008"
+name = "Lateral Movement"
+reference = "https://attack.mitre.org/tactics/TA0008/"
+
+[internal]
+min_endpoint_version = "8.4.0"

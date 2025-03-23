@@ -1,0 +1,121 @@
+[rule]
+description = """
+Identifies the execution of a suspicious MsiExec child process. Adversaries may abuse Windows Installers for initial
+access and delivery of malware.
+"""
+id = "877c6bd9-8df1-4a15-aa97-2a091731b15d"
+license = "Elastic License v2"
+name = "Suspicious MsiExec Child Process"
+os_list = ["windows"]
+reference = ["https://www.elastic.co/security-labs/spring-cleaning-with-latrodectus"]
+version = "1.0.27"
+
+query = '''
+process where event.action == "start" and
+   not user.id : "S-1-5-18" and
+
+   (process.parent.name : "msiexec.exe" or
+    process.parent.executable : "?:\\WINDOWS\\Installer\\MSI*.tmp") and
+
+  (
+    (process.name : "rundll32.exe" and process.args : ("?:\\Users\\*\\AppData\\*", "?:\\ProgramData\\*", "?:\\Users\\Public\\*", "-e")) or
+
+    (process.parent.args : "/DontWait" and process.parent.args : "/HideWindow") or
+
+    (process.name : "cmd.exe" and
+     process.command_line : ("*start*microsoft-edge:*", "*reg add*", "*fodhelper.exe*", "*CurrentVersion\\Run*", "*set *&set*")) or
+
+
+    process.executable : ("?:\\Users\\*\\Documents\\*", "?:\\Users\\Public\\*", "?:\\ProgramData\\*", "?:\\Users\\*\\AppData\\Roaming\\*") or
+
+    process.name : ("wscript.exe", "cscript.exe") or
+
+    (process.name : "powershell.exe" and
+     process.command_line :
+             ("*Software\\Classes\\CLSID*", "*Reflection.Assembly*", "*::Load*", 
+              "?:\\Users\\*\\AppData\\Local\\Temp\\pss*.tmp.ps1", "* -enc *", "* -ec *", "*Add-MpPreference*",
+              "*WebClient*", "*DownloadFile*", "*DownloadString*", "*iex)*", "*-encodedCommand*", "*HwAaQBlAHgA*")) or
+
+    (process.name : "powershell.exe" and process.parent.name : "msiexec.exe" and process.parent.args : "/v") or
+
+    /* AteraAgent RMM abused by threat actors -  */
+    (process.pe.original_file_name == "AteraAgent.exe" and process.args : "/IntegratorLogin=*@*" and process.args : "/AccountId=??*") or
+
+    (process.pe.original_file_name : "WMIC.exe" and process.args : "MSFT_MpPreference")
+
+    ) and
+
+    /* noisy FP patterns */
+    not (process.name : "rundll32.exe" and process.command_line : ("*zzzzInvokeManagedCustomActionOutOfProc*", "*MSI*.tmp,WiseElevateRun*")) and
+
+    not (process.name : ("wscript.exe", "cscript.exe") and
+         process.args : ("?:\\Program Files\\*", "?:\\Program Files (x86)\\*", "IsHTTPSListenerPresent.vbs")) and
+
+    not (process.executable : "?:\\ProgramData\\*" and (process.Ext.token.integrity_level_name : "high" or process.args : "*uninstall*")) and
+
+    not (process.executable : "?:\\Users\\*\\AppData\\Roaming\\*" and (process.code_signature.exists == true or process.Ext.token.integrity_level_name : "high")) and
+
+    not (process.name : "powershell.exe" and
+         process.parent.command_line :
+               ("*\\AppData\\Roaming\\Browser Extension\\*",
+                "*\\AppData\\Roaming\\Browser Assistant\\*",
+                "*\\AppData\\Roaming\\BBWC\\*",
+                "*$env:APPDATA*/Browser Extension/*")) and 
+                
+    not (process.name : "regsvr32.exe" and process.args :  "/i:user" and process.args : "/n") and
+    not (process.executable : "?:\\ProgramData\\*\\*\\*" and process.code_signature.trusted == true) and
+    not (process.name : "cscript.exe" and process.command_line : "cscript IsHTTPSListenerPresent.vbs") and
+    not process.hash.sha256 :
+                 ("d09e299150f4a9904cfbedff7a2478ce16b9c1ea6a5bc2fba0bcb2b1f7a845d0",
+                  "73634c154e121ea172dce96da629f50aa8eb69f72922f5ff14d1331ea281f105",
+                  "7f7635389553b7441a27a2b44988a56155f79320445923e73e59c91ea521f8d2",
+                  "2fd626d4ade59166e3db27ee6f24b24040498928840d88e293edd92c503aca8d",
+                  "530e754c40d38fab5e3f802380f202ca7e1c675ea25b32dfe6d419403d7b0e5b",
+                  "dd1854024eb375e23c42745b1a5848734a262aa5c31571112a0b824c3729a638",
+                  "525b993f89500abc33cab311e453beb2841d2335eb787a3753f7ff092cca195a",
+                  "ba8c1a434b2cc355fc2f005639af36729f32fc91ff1f278bcded65428cad0126",
+                  "7c33270e54646ba7cbda98157a052586812d004670b02f920b285e4eb42507b5",
+                  "3f59a2799dc6aa6cdddbc62e169fad7e7dd282bffba3538ed2594e3a8d6c1a05",
+                  "54b1f519d64469ffcb2c9f417dc9b46e16f44a19522236122741a9df7a877f0a",
+                  "ec4a6b16df94b1c78b48796d7f624fc19253140569ccb51dfb7f6771d2b0e53d") and
+   not (process.name : "rundll32.exe" and process.args : "printui.dll,PrintUIEntry") and
+   not (process.name : "regsvr32.exe" and process.args : "?:\\ProgramData\\LEAP Office\\Cloud\\Extras\\Automation Extras\\LEAPRedemption64.dll") and
+   not (process.name : "cmd.exe" and process.args : "del" and process.args : "/f") and
+   not (process.args : "C:\\Program Files\\Kairos\\Duet Display" and process.name : "cmd.exe") and
+   not (process.name : "cmd.exe" and process.args : "Files\\Tychon\\\\uninstall.bat " and process.args : "C:\\Program") and
+   not (process.name : "powershell.exe" and
+        process.command_line : ("*Web Client\\Modules\\NAVWebClientManagement\\NAVWebClientManagement.psm1*", "*https://go.microsoft.com/fwlink/p/?LinkId=*")) and
+   not (process.name : "powershell.exe" and process.args : ("?:\\Program Files\\*", "?:\\Program Files (x86)\\*"))
+'''
+
+min_endpoint_version = "7.15.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1218"
+name = "System Binary Proxy Execution"
+reference = "https://attack.mitre.org/techniques/T1218/"
+[[threat.technique.subtechnique]]
+id = "T1218.007"
+name = "Msiexec"
+reference = "https://attack.mitre.org/techniques/T1218/007/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"

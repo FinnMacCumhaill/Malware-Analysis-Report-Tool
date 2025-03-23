@@ -1,0 +1,86 @@
+[rule]
+description = "Identifies command shell activity started via RunDLL32, which is commonly abused by attackers to host malicious code."
+id = "b8a0a3aa-0345-4035-b41d-f758a6c59a78"
+license = "Elastic License v2"
+name = "Command Shell Activity Started via RunDLL32"
+os_list = ["windows"]
+reference = ["https://www.elastic.co/security-labs/spring-cleaning-with-latrodectus"]
+version = "1.0.32"
+
+query = '''
+process where event.type == "start" and
+  process.name : ("cmd.exe", "powershell.exe") and
+    process.parent.name : "rundll32.exe" and process.parent.command_line != null and
+    not process.parent.command_line :
+                    ("*:\\Windows\\System32\\SHELL32.dll,RunAsNewUser_RunDLL*",
+                     "*zzzzInvokeManagedCustomActionOutOfProc*", 
+                     "\"C:\\WINDOWS\\system32\\rundll32.exe\" C:\\WINDOWS\\system32\\PcaSvc.dll,PcaPatchSdbTask") and
+    not (process.parent.args : "aepdu.dll,AePduRunUpdate" and process.args : "osloader" and process.args : "%windir%\\system32\\bcdedit") and
+    not (process.parent.args : ("?:\\Windows\\System32\\LogiLDA.dll,LogiFetch", "?:\\WINDOWS\\system32\\PcaSvc.dll,PcaPatchSdbTask") and
+         process.name : "powershell.exe" and process.command_line : "*install*") and
+    not (process.args : "dellpointstick://Mainpage/*" and process.parent.args : "Vxd_launch_UI") and
+    not (process.parent.args : "?:\\Windows\\system32\\davclnt.dll,DavSetCookie" and process.name : "powershell.exe") and
+    not process.parent.args : "AppXDeploymentExtensions.OneCore.dll,ShellRefresh" and
+    not (process.args : ("launchalpsdelltouchpad://Mainpage/path2?param=start", "alpsdelltouchpadsettings://Mainpage/path2?param=start") and
+         process.parent.args : "?:\\WINDOWS\\System32\\main.cpl") and
+    not (process.command_line : "*REG QUERY HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography*" and
+         process.parent.args : "?:\\WINDOWS\\system32\\PcaSvc.dll,PcaPatchSdbTask") and
+    not (process.args : "launchalpsdelltouchpad://Mainpage/path2?param=start" and process.parent.args : "Vxd_launch_UI") and 
+    not (process.working_directory : "C:\\Program Files (x86)\\Windows Kits\\*\\Assessment and Deployment Kit\\Windows Assessment Toolkit\\Energy\\" and 
+         process.args : "axecore.dll,RunJob_RunDll") and
+    not process.parent.command_line :  "rundll32.exe \"C:\\Program Files (x86)\\Windows Shell\\fx_ws_main.dll\",ProcessDll s=hidedialog" and
+    not (process.parent.command_line : "C:\\Windows\\system32\\rundll32.exe iernonce.dll,RunOnceExProcess" and
+         process.working_directory : "C:\\Windows\\system32\\") and
+    not (process.parent.command_line : "\"C:\\WINDOWS\\System32\\rundll32.exe\" C:\\WINDOWS\\Lvgic10u.dll,Execute" and
+         process.command_line : "cmd /c C:\\WINDOWS\\System32\\rundll32.exe C:\\WINDOWS\\Lvgic10u.dll,ExecuteQuick")
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.001"
+name = "PowerShell"
+reference = "https://attack.mitre.org/techniques/T1059/001/"
+
+[[threat.technique.subtechnique]]
+id = "T1059.003"
+name = "Windows Command Shell"
+reference = "https://attack.mitre.org/techniques/T1059/003/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1218"
+name = "System Binary Proxy Execution"
+reference = "https://attack.mitre.org/techniques/T1218/"
+[[threat.technique.subtechnique]]
+id = "T1218.011"
+name = "Rundll32"
+reference = "https://attack.mitre.org/techniques/T1218/011/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"

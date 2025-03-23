@@ -1,0 +1,80 @@
+[rule]
+description = """
+Identifies a process running from a mounted ISO or USB device or it's descendants creating a new scheduled task for
+persistence. Adversaries may use this technique to maintain persistence on an endpoint.
+"""
+id = "3c12c648-e29f-4bff-9157-b07f2cbddf1a"
+license = "Elastic License v2"
+name = "Scheduled Task from a Removable or Mounted ISO Device"
+os_list = ["windows"]
+reference = ["https://docs.microsoft.com/en-us/windows/win32/taskschd/daily-trigger-example--xml-"]
+version = "1.0.18"
+
+query = '''
+sequence with maxspan=5m
+ [process where event.action == "start" and
+  (
+   (process.Ext.device.product_id : ("Virtual DVD-ROM", "Virtual Disk", "USB *") and not process.executable : "C:\\*") or
+
+   descendant of [process where event.action == "start" and
+   process.Ext.device.product_id : ("Virtual DVD-ROM", "Virtual Disk", "USB *") and not process.executable : "C:\\*"]
+   ) and
+   not process.executable : ("?:\\Program Files\\Microsoft Office\\root\\Integration\\Addons\\OneDriveSetup.exe",
+                             "?:\\Program Files (x86)\\Microsoft Office\\root\\Integration\\Addons\\OneDriveSetup.exe",
+                             "?:\\Program Files (x86)\\AnVir Task Manager\\AnVir.exe",
+                             "?:\\$WINDOWS.~BT\\Sources\\SetupHost.exe") and
+   not (process.code_signature.subject_name : "Global Security Center" and process.code_signature.trusted == true) and
+   not process.hash.sha256 : ("0069d5e4690d717377410d56b56fc543edb333eb099eb591fbe561fd36c4feea",
+                              "e720b05e5bc033c8cd48be3d88bf29af9ba51eeed489d6ef23d64f8b99d5648c",
+                              "98935483ec3a9d55b45a095e1dc5a98c894aec51131390c914bf6950905629ab") and
+   not (process.name : "schtasks.exe" and process.args : "Schneider Electric\\Power Monitoring Expert\\*"
+        and process.args : "*C:\\Program Files (x86)\\Schneider Electric\\Power Monitoring Expert\\*") and
+   not (process.executable : "?:\\Program Files\\Internet Explorer\\iexplore.exe" and process.args : "Bootstrap\\Log\\*\\SqlDiscoveryReport.htm")
+ ] by process.entity_id
+[file where event.action : "creation" and process.name : "svchost.exe" and
+  file.path : ("?:\\Windows\\Tasks\\*", "?:\\Windows\\System32\\Tasks\\*")] by Effective_process.entity_id
+'''
+
+min_endpoint_version = "8.4.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1091"
+name = "Replication Through Removable Media"
+reference = "https://attack.mitre.org/techniques/T1091/"
+
+
+[threat.tactic]
+id = "TA0001"
+name = "Initial Access"
+reference = "https://attack.mitre.org/tactics/TA0001/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1053"
+name = "Scheduled Task/Job"
+reference = "https://attack.mitre.org/techniques/T1053/"
+[[threat.technique.subtechnique]]
+id = "T1053.005"
+name = "Scheduled Task"
+reference = "https://attack.mitre.org/techniques/T1053/005/"
+
+
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+
+[internal]
+min_endpoint_version = "8.4.0"

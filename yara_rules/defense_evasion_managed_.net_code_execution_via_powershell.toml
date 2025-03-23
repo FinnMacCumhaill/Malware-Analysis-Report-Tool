@@ -1,0 +1,84 @@
+[rule]
+description = """
+Identifies the compilation of managed code via Powershell with suspicious command-line patterns, this could indicate
+code injection or other form of suspicious code execution via Windows PowerShell.
+"""
+id = "cd886776-8790-4724-9484-3f0008b87da7"
+license = "Elastic License v2"
+name = "Managed .NET Code Execution via PowerShell"
+os_list = ["windows"]
+version = "1.0.30"
+
+query = '''
+process where event.type == "start" and
+  process.name : "csc.exe" and process.parent.name : "powershell.exe" and
+  not user.id : ("S-1-5-18", "S-1-5-19", "S-1-5-20") and
+  (
+   /* long command-line potentially encoded */
+   (length(process.parent.command_line) >= 200 and process.parent.args : ("-e", "-enc", "-ep", "-encoded", "*;iex")) or
+
+   /* suspicious args */
+   process.parent.command_line : ("*HKCU*", "* IEX*", "*^*^*^*^*^*^*^*^*^*", "*.replace*", "*Reflection.Assembly*",
+   "*set *set *set *", "*;iex*", "*IEX (*", "*FromBase64String*", "*.downloadstring*", "*.downloadfile*", "*.downloaddata*", 
+   "*.webclient)*")
+
+   ) and
+   not process.parent.args : ("?:\\Program Files (x86)\\*", "?:\\Program Files\\*", "visualstudio20??-workload-vctools;") and
+   not process.args : "@?:\\Windows\\TEMP\\*.cmdline" and
+   not (process.parent.args : "-ExecutionPolicy" and process.parent.command_line : "*.vscode\\extensions*") and
+   not process.parent.command_line : ("*http://localhost:9900/CaptureManager?wsdl*", "*KMS_VL_ALL_AIO.cmd*", 
+                                      "*ServerURI*https*.office365.com*", "*Invoke-ps2exe -inputFile*", 
+                                      "*amazonaws.com/scripts/FleetSweep.ps1*", 
+                                      "*EnterpriseServices/Integrations/IntegrationHelper.svc*", 
+                                      "*chocolatey.org*", "*amazonaws.com/scripts/Leaf-Agent_*", 
+                                      "*Activator*MAS_*", "*:\\Program Files (x86)\\Universal\\Host\\host.dll*", 
+                                      "*E:\\3Activator.cmd*", "*https://install.telivy.com/scan-passwords.ps1*",
+                                      "*C:\\temp\\PS2EXE-GUI\\ps2exe.ps1*",
+                                      "*repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-wrapper*") and
+   not (process.parent.args == "$execWrapper" and process.parent.args == "$execWrapper.Split(@(\"`0`0`0`0\")," and process.parent.args == "\"ANSIBLE_BOOTSTRAP_ERROR:")
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.001"
+name = "PowerShell"
+reference = "https://attack.mitre.org/techniques/T1059/001/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1055"
+name = "Process Injection"
+reference = "https://attack.mitre.org/techniques/T1055/"
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"

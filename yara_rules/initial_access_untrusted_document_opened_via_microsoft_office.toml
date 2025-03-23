@@ -1,0 +1,133 @@
+[rule]
+description = """
+Identifies the execution of Microsoft Office processes to open a document classified by Microsoft SmartScreen as
+originating from an unknown source followed by Microsoft Office spawning an unusual child process.
+"""
+id = "2887ca7c-40b9-4d04-ab9c-65a5c0428ab8"
+license = "Elastic License v2"
+name = "Untrusted Document Opened via Microsoft Office"
+os_list = ["windows"]
+reference = [
+    "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-smartscreen/microsoft-defender-smartscreen-overview",
+]
+version = "1.0.29"
+
+query = '''
+sequence with maxspan=1m
+ [process where event.action == "start" and
+  process.name : ("EXCEL.EXE", "WINWORD.EXE", "POWERPNT.EXE") and
+
+  /* probably unknown or potentially unsafe to smartscreen files classification */
+  process.Ext.token.security_attributes : "SMARTLOCKER://SMARTSCREENORIGINCLAIM" and
+
+  /* Docs opened from file shares */
+  not process.args : "\\\\*"] by process.entity_id
+
+ [process where event.action == "start" and
+  process.parent.name : ("EXCEL.EXE", "WINWORD.EXE", "POWERPNT.EXE") and
+
+  /* unknow office doc spawns an unusual child */
+  not process.executable :
+              ("?:\\Program Files\\*.exe",
+               "?:\\Program Files (x86)\\*.exe",
+               "?:\\Windows\\System32\\WerFault.exe",
+               "?:\\Windows\\SysWOW64\\WerFault.exe",
+               "?:\\Windows\\System32\\wermgr.exe",
+               "?:\\windows\\splwow64.exe",
+               "?:\\Windows\\system32\\dwwin.exe",
+               "?:\\Windows\\SysWOW64\\DWWIN.EXE",
+               "?:\\Windows\\Microsoft.NET\\*\\csc.exe",
+               "?:\\Windows\\system32\\verclsid.exe",
+               "?:\\Windows\\SysWOW64\\verclsid.exe",
+               "D:\\Microsoft office 2016\\office2016\\Office16\\*.EXE",
+               "D:\\Programs\\Foxit Software\\Foxit PhantomPDF\\Plugins\\Creator\\FoxitProxyServer_Socket_PH.exe",
+               "\\\\*",
+               "\\Device\\Mup\\*",
+               "?:\\Adobe\\Acrobat DC\\Acrobat\\AcroTray.exe") and
+  not (process.name : "BrowserSubprocess.exe" and process.command_line : "*--type=gpu-process*--no-sandbox*") and
+  not (process.code_signature.subject_name :
+          ("Zhuhai Kingsoft Office Software Co., Ltd.",
+           "Poll Everywhere, Inc.",
+           "Xerox Corporation",
+           "Mozilla Corporation",
+           "Vivaldi Technologies AS",
+           "成都艾斯莱德网络科技有限公司",
+           "Tencent Technology(Shenzhen) Company Limited",
+           "Beijing Sogou Technology Development Co., Ltd.",
+           "Beijing Yundong Zhixiao Network Technology Co. , Ltd.",
+           "Dell Incorporated",
+           "sli.do s. r. o.",
+           "CANON INC.",
+           "TEAMDEV LTD.",
+           "Canon Inc.",
+           "HP Inc.",
+           "SEIKO EPSON CORPORATION",
+           "FOXIT SOFTWARE INC.",
+           "Google LLC",
+           "Brave Software, Inc.",
+           "Opera Norway AS",
+           "Bloomberg LP",
+           "Microsoft Windows Hardware Compatibility Publisher",
+           "Orpheus Technology Ltd",
+           "Foxit Software Incorporated",
+           "Samsung Electronics CO., LTD.",
+           "REFINITIV US LLC") and
+       process.code_signature.trusted == true) and
+  not (process.name : "rundll32.exe" and
+       process.args :
+           ("?:\\WINDOWS\\system32\\spool\\DRIVERS\\x64\\*,MonitorPrintJobStatus",
+            "ndfapi.dll,NdfRunDllDiagnoseWithAnswerFile",
+            "?:\\windows\\system32\\spool\\DRIVERS\\x64\\3\\*.DLL,CheckDevice",
+            "?:\\Program Files\\*",
+            "?:\\Program Files (x86)\\*")) and
+  not (process.pe.original_file_name : ("msedge.exe", "FileCoAuth.exe") and process.code_signature.trusted == true) and
+  not process.hash.sha256 : 
+             ("e68d9768f1d1c2ef2e614dec47e5f0719030073373533603f3e9a914b5607d85", 
+              "ded86974860dd9802db04d92409c05e2ff8b3de7f172c957c34861bbad6a9af3",
+              "4a21f9b556046a31878a3f44e1d210baee7663cc5f9d8e980f67e180a6dd3592",
+              "bc1ec9584f749b1d264cf1ce040e98f96de680efd74a1dab2de53e8d481c5b79",
+              "b72b18af7ed446db1630a2263c76fc3cbde6c189f88ea7ba4e42ecf61cb0ee8b",
+              "28c69f2b353a8df70abef0e5f09e1d390ef88e79b08465bc21c0d9fdb3b61f0d",
+              "4a06605651958c56e89a468f600c3322e3fdc97c8143bcfd1d8d1ebadb0920fb",
+              "b20dff35c0aabb92f2e72d2236d33e3f0d9f150ad8206db9d56c642825775c25",
+              "92fd0ed373796efdba340db4345c619d8fa811b90efdd400384bfbf8857f6d6c",
+              "e86df8bba04d1d437eaaf913f8252cdee5f4534eae8e730a49ba22681a37e935",
+              "083166e1cab8bceec2730682816fbb41be91356fe92bb45d1c860439ee0e52e6") and
+  not (process.pe.original_file_name : ("Teams.exe", "msedgewebview2.exe", "BDEUNLOCK.EXE") and process.code_signature.trusted == true) and
+  not (process.executable : "?:\\Windows\\Microsoft.NET\\Framework64\\*\\RegAsm.exe" and process.args : "?:\\Program Files (x86)\\Thomson Reuters\\*") and
+  not (process.name : "cmd.exe" and process.command_line : "\"CMD.exe\" /C dotnet --list-runtimes")
+  ] by process.parent.entity_id
+'''
+
+min_endpoint_version = "8.10.0"
+reputation = true
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 1
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 1
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1566"
+name = "Phishing"
+reference = "https://attack.mitre.org/techniques/T1566/"
+[[threat.technique.subtechnique]]
+id = "T1566.001"
+name = "Spearphishing Attachment"
+reference = "https://attack.mitre.org/techniques/T1566/001/"
+
+
+
+[threat.tactic]
+id = "TA0001"
+name = "Initial Access"
+reference = "https://attack.mitre.org/tactics/TA0001/"
+
+[internal]
+min_endpoint_version = "8.10.0"

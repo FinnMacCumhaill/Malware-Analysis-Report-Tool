@@ -1,0 +1,117 @@
+[rule]
+description = """
+Identifies the execution of a child process from a Microsoft Common Console file. Adversaries may embed malicious
+commands in an MSC file in order to trick them into executing malicious commands.
+"""
+id = "6e5cb5a0-1439-481d-bcba-0c5307b4746b"
+license = "Elastic License v2"
+name = "Suspicious Execution via Microsoft Common Console"
+os_list = ["windows"]
+reference = [
+    "https://www.genians.co.kr/blog/threat_intelligence/facebook",
+    "https://www.elastic.co/security-labs/grimresource",
+]
+version = "1.0.5"
+
+query = '''
+process where event.action == "start" and
+ process.parent.executable : "?:\\Windows\\System32\\mmc.exe" and process.parent.args : "*.msc" and
+ not process.parent.args : ("?:\\Windows\\System32\\*.msc", "?:\\Windows\\SysWOW64\\*.msc", "?:\\Program files\\*.msc", "?:\\Program Files (x86)\\*.msc") and
+ not process.executable :
+              ("?:\\Windows\\System32\\mmc.exe",
+               "?:\\Windows\\System32\\wermgr.exe",
+               "?:\\Windows\\System32\\WerFault.exe",
+               "?:\\Windows\\System32\\DWWIN.EXE",
+               "?:\\Windows\\SysWOW64\\mmc.exe",
+               "?:\\Program Files\\*.exe",
+               "?:\\Program Files (x86)\\*.exe",
+               "?:\\Windows\\System32\\shrpubw.exe",
+               "?:\\Windows\\System32\\certreq.exe",
+               "?:\\Windows\\System32\\spool\\drivers\\x64\\3\\*.EXE",
+               "?:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+               "?:\\Program Files\\internet explorer\\iexplore.exe",
+               "?:\\Windows\\Microsoft.NET\\Framework64\\*\\vbc.exe",
+               "?:\\windows\\system32\\VmConnect.exe",
+               "?:\\Windows\\System32\\Dism\\dismhost.exe",
+               "?:\\Windows\\System32\\DeviceProperties.exe") and
+ not (process.executable : "?:\\Windows\\explorer.exe" and process.args : "ms-settings:windowsupdate") and
+ not (process.pe.original_file_name == "DismHost.exe" and process.args : "{*}" and
+      process.code_signature.subject_name == "Microsoft Windows" and process.code_signature.trusted == true) and
+ process.hash.sha256 != "7208b36f57e9af293043adcaf2180db10fff9e0bfffdbac81ad2ac5dbead6a30"
+'''
+
+min_endpoint_version = "7.16.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1566"
+name = "Phishing"
+reference = "https://attack.mitre.org/techniques/T1566/"
+[[threat.technique.subtechnique]]
+id = "T1566.001"
+name = "Spearphishing Attachment"
+reference = "https://attack.mitre.org/techniques/T1566/001/"
+
+[[threat.technique.subtechnique]]
+id = "T1566.002"
+name = "Spearphishing Link"
+reference = "https://attack.mitre.org/techniques/T1566/002/"
+
+
+
+[threat.tactic]
+id = "TA0001"
+name = "Initial Access"
+reference = "https://attack.mitre.org/tactics/TA0001/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1204"
+name = "User Execution"
+reference = "https://attack.mitre.org/techniques/T1204/"
+[[threat.technique.subtechnique]]
+id = "T1204.001"
+name = "Malicious Link"
+reference = "https://attack.mitre.org/techniques/T1204/001/"
+
+[[threat.technique.subtechnique]]
+id = "T1204.002"
+name = "Malicious File"
+reference = "https://attack.mitre.org/techniques/T1204/002/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1218"
+name = "System Binary Proxy Execution"
+reference = "https://attack.mitre.org/techniques/T1218/"
+[[threat.technique.subtechnique]]
+id = "T1218.014"
+name = "MMC"
+reference = "https://attack.mitre.org/techniques/T1218/014/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.16.0"

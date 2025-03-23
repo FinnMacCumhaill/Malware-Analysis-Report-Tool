@@ -1,0 +1,112 @@
+[rule]
+description = """
+Identifies DNS queries to Mail domain names by an unusual process. Adversaries may communicate using application layer
+protocols associated with electronic mail delivery to avoid detection/network filtering by blending in with existing
+traffic.
+"""
+id = "0898f7c9-f667-4db1-a1ce-ddbf61a32361"
+license = "Elastic License v2"
+name = "Suspicious Communication via Mail Protocol"
+os_list = ["windows"]
+version = "1.0.16"
+
+query = '''
+sequence by process.entity_id with maxspan=3m
+ [process where event.action == "start" and
+  (
+   (process.Ext.device.product_id : ("Virtual DVD-ROM", "Virtual Disk") and not process.executable : "C:\\*") or
+   (process.Ext.relative_file_creation_time <= 500 and (process.code_signature.trusted == false or process.code_signature.exists == false) and 
+    process.executable : "C:\\*") or
+   process.name : ("rundll32.exe", "regsvr32.exe", "mshta.exe") or
+   process.pe.original_file_name : "AutoIt*.exe" or
+   (process.Ext.relative_file_creation_time <= 500 and
+    process.executable :
+                ("C:\\Users\\Public\\*",
+                 "C:\\Users\\*\\Downloads\\*",
+                 "C:\\Windows\\Temp\\*",
+                 "C:\\Windows\\Tasks\\*",
+                 "C:\\ProgramData\\*",
+                 "C:\\Windows\\Microsoft.NET\\*")) or
+    process.executable : ("C:\\Users\\*\\AppData\\Local\\Temp\\7z*\\",
+                         "C:\\Users\\*\\AppData\\Local\\Temp\\Rar$*\\*",
+                         "C:\\Users\\*\\AppData\\Local\\Temp\\Temp?_*\\*",
+                         "C:\\Users\\*\\AppData\\Local\\Temp\\BNZ.*")
+  ) and
+  not process.executable :
+              ("?:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\*\\MsMpEng.exe",
+               "?:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\*\\NisSrv.exe",
+               "?:\\ProgramData\\Microsoft\\Windows Defender Advanced Threat Protection\\Platform\\*\\MsSense.exe",
+               "?:\\Program Files (x86)\\*.exe",
+               "?:\\Program Files\\*.exe") and
+  not (process.code_signature.subject_name :
+              ("Google LLC", "Mozilla Corporation", "Wave*", "Brave Software, Inc.", "Opera Norway AS") and
+       process.code_signature.trusted == true) and
+  not (process.name : "rundll32.exe" and process.parent.executable : "?:\\Program Files*\\Microsoft Office\\root\\Client\\AppVLP.exe") and
+  not (process.name : ("rundll32.exe", "regsvr32.exe") and
+       process.args : ("?:\\PROGRA~?\\MICROS~?\\Office*\\MLCFG32.CPL,@0",
+                       "?:\\Program Files (x86)\\*",
+                       "?:\\Program Files\\*",
+                       "?:\\Windows\\System32\\mshtml.dll,PrintHTML")) and
+  not process.hash.sha256 :
+                  ("e602b527d34ecbb43339f55bf9aa6506886a5cfda239099fbaca3754bcee8618",
+                   "af0652daaa73b748ea967714aaac2d439b562e278d5ad6109416f5fbfee81332",
+                   "b361a064f3e4d953619af3f4646b65b877b1971c716c7b67de3173f50cd9408b",
+                   "8dd74f858de15f072da0fafd3f0a42973ee0c83d8151191fd085c38b15559543",
+                   "8aae9f3c8bddf3b59a16c1e4ba93d4e3b178dc1a9757e9a66a7811ca318f50c4",
+                   "7e400dbd2d895f79d25f42e9738a96d5f0526615fd793e897f2dc90d1c3155f5",
+                   "4a5519a14015a8adfd7d8232bfac648b2bc15f05318be3bf6eb6bcd7191b6818",
+                   "7ad17c0d93925a9b1f172351c397397fcea0f21f881d26412f32e7f7a5c1977f",
+                   "6f44f5a92b3893115e7fdd52735dd639de5d286111841c69aaba53129718eb88",
+                   "9fbf6e5cc6f6f1fcf69c39637fc62ddfe92600364ca6182f748898116f95577c",
+                   "800a013f47846f33f28f28f51a7bc6ad7285466492eb1186511f997438c7d82e",
+                   "3645e1e234ecebe6f138e909203e7d9867cfe3c0880742a280d04673fbf61a46",
+                   "57f0db8244e21dff824d42562fb8a32dc4c65fced809f4b8c319ef9e140ef370",
+                   "b74cfbb7d082e857017b6d593a931ab187cd48535077a74d446974571b25875f")
+  ]
+ [dns where dns.question.name : ("smtp.*", "mail.*")]
+'''
+
+min_endpoint_version = "8.4.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1204"
+name = "User Execution"
+reference = "https://attack.mitre.org/techniques/T1204/"
+[[threat.technique.subtechnique]]
+id = "T1204.002"
+name = "Malicious File"
+reference = "https://attack.mitre.org/techniques/T1204/002/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1071"
+name = "Application Layer Protocol"
+reference = "https://attack.mitre.org/techniques/T1071/"
+[[threat.technique.subtechnique]]
+id = "T1071.003"
+name = "Mail Protocols"
+reference = "https://attack.mitre.org/techniques/T1071/003/"
+
+
+
+[threat.tactic]
+id = "TA0011"
+name = "Command and Control"
+reference = "https://attack.mitre.org/tactics/TA0011/"
+
+[internal]
+min_endpoint_version = "8.4.0"

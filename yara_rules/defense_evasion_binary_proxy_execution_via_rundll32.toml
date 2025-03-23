@@ -1,0 +1,99 @@
+[rule]
+description = """
+Identifies the execution of a malicious application via rundll32.exe. Adversaries may abuse rundll32.exe to proxy
+execution of malicious code and bypass application whitelisting configuration.
+"""
+id = "f60455df-5054-49ff-9ff7-1dc4e37b6ea7"
+license = "Elastic License v2"
+name = "Binary Proxy Execution via Rundll32"
+os_list = ["windows"]
+reference = [
+    "https://lolbas-project.github.io/lolbas/Libraries/Shell32/",
+    "https://lolbas-project.github.io/lolbas/Libraries/Zipfldr/",
+    "https://lolbas-project.github.io/lolbas/Libraries/Pcwutl/",
+    "https://lolbas-project.github.io/lolbas/Libraries/Advpack/",
+    "https://lolbas-project.github.io/lolbas/Libraries/Ieadvpack/",
+    "https://lolbas-project.github.io/lolbas/Libraries/Url/",
+    "https://lolbas-project.github.io/lolbas/Libraries/Desk/",
+]
+version = "1.0.32"
+
+query = '''
+sequence with maxspan=1m
+  [process where event.action == "start" and
+   process.pe.original_file_name == "RUNDLL32.EXE" and
+   process.command_line :
+          ("*advpack*RegisterOCX*",
+           "*advpack*#12*",
+           "*zipfldr*RouteTheCall*",
+           "*pcwutl*LaunchApplication*",
+           "*pcwutl*#1*",
+           "*url.dll*FileProtocolHandler*file://*",
+           "*url.dll*FileProtocolHandler*.exe*",
+           "*shell32.dll*ShellExec_RunDLL*",
+           "*advpack*LaunchINFSection*",
+           "*desk*InstallScreenSaver*",
+           "*shell32*WaitForExplorerRestart*") and
+   /* Issue #265 */
+   not (process.command_line : "*url.dll*FileProtocolHandler*" and
+        process.command_line : ("*http://*", "*zoommtg://*", "*://*&*&*")) and
+
+   /* Legit LaunchApplication instances via msdt */
+   not (process.command_line : "*pcwutl.dll,LaunchApplication*" and
+        process.parent.name :  "msdt.exe" and
+        process.working_directory : "?:\\Windows\\system32\\") and
+
+   not (process.command_line :  "*shell32*WaitForExplorerRestart*" and process.args : "?:\\Windows\\*explorer.exe")
+   ] by process.entity_id
+  [process where event.action == "start" and
+   not process.executable :
+                ("?:\\Program Files\\*.exe",
+                 "?:\\Program Files (x86)\\*.exe",
+                 "C:\\Windows\\System32\\shutdown.exe",
+                 "C:\\Windows\\System32\\WerFault.exe") and
+   not (process.name : "wscript.exe" and process.args : "Cathexis Archive Viewer.vbs") and
+   not process.args : ("?:\\Program Files\\*", "?:\\Program Files (x86)\\*") and
+   not process.Ext.token.integrity_level_name == "system" and
+   not process.executable : "?:\\Windows\\System32\\grpconv.exe" and
+   not (process.code_signature.subject_name : "Adobe Inc." and process.code_signature.trusted == true) and
+   not process.hash.sha256 :
+                  ("f6bef3f879e082d115c2ad199a986da1660514699f5e752c7b628d9438d7cb49",
+                   "c2831f5b010f099cd1733a0183adfa16cb834a9169fc55c6f7e6dc3267488c3f",
+                   "70ebedc5aba37140682a0535eac9f1cfb77cc9916955e36f19ba1da893068a83") and
+   not (process.executable : "?:\\Windows\\System32\\msiexec.exe" and process.parent.args : "?:\\WINDOWS\\system32\\pcwutl.dll,LaunchApplication") and 
+   not (process.executable : "?:\\Windows\\System32\\verclsid.exe" and process.args : "{71DCE5D6-4B57-496B-AC21-CD5B54EB93FD}" and process.parent.command_line : "*ShellExec_RunDLL*") and 
+   not (process.executable : ("?:\\Windows\\System32\\notepad.exe", "?:\\Windows\\System32\\mspaint.exe") and process.parent.command_line : "*ShellExec_RunDLL*")
+   ] by process.parent.entity_id
+'''
+
+min_endpoint_version = "7.15.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 1
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 1
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1218"
+name = "System Binary Proxy Execution"
+reference = "https://attack.mitre.org/techniques/T1218/"
+[[threat.technique.subtechnique]]
+id = "T1218.011"
+name = "Rundll32"
+reference = "https://attack.mitre.org/techniques/T1218/011/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"

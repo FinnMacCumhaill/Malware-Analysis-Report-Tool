@@ -1,0 +1,111 @@
+[rule]
+description = """
+Identifies when a process is a descendant of a browser or compression utility is writing to commonly abused persistence
+locations (registry run keys and startup folder). Adversaries may use this technique to maintain persistence on an
+endpoint.
+"""
+id = "e05ccd29-43d0-4ae4-a142-2ae4dd7b86e8"
+license = "Elastic License v2"
+name = "Startup Persistence from a Browser or Compression Utility Descendant"
+os_list = ["windows"]
+reference = ["https://docs.microsoft.com/en-us/previous-versions/technet-magazine/ee851671(v=msdn.10)"]
+version = "1.0.17"
+
+query = '''
+sequence by process.entity_id with maxspan=5m
+ [process where event.action == "start" and
+ (process.Ext.relative_file_creation_time <= 1800 or process.Ext.relative_file_name_modify_time <= 1800) and
+ (process.code_signature.trusted == false or process.code_signature.exists == false) and
+ not process.code_signature.status : ("errorExpired", "errorCode_endpoint*") and
+
+ /* Direct Child */
+ (
+  (process.executable : ("?:\\Users\\*\\Downloads\\*", "*\\AppData\\Local\\Temp\\*") and
+   process.parent.name: ("explorer.exe", "chrome.exe", "msedge.exe", "firefox.exe", "7zFM.exe", "iexplore.exe", "winrar.exe")) or
+
+ /* Descendant */
+  descendant of [
+  process where event.action == "start" and
+  (process.code_signature.trusted == false or process.code_signature.exists==false)
+  and process.parent.name: ("explorer.exe", "chrome.exe", "msedge.exe", "firefox.exe", "7zFM.exe", "iexplore.exe", "winrar.exe") and
+  process.executable: ("*\\Downloads\\*", "*\\AppData\\Local\\Temp\\*")
+  ]
+ ) and
+
+ not process.hash.sha256 :
+             ("7a6b97bf43453c47d905c6f49e3cc6ee8b70f0e289700aa6145f40577ca7b5d4",
+              "cc783a04ccbca4edd06564f8ec88fe5a15f1e3bb26cec7de5e090313520d98f3",
+              "8654a21fb5768efef4f363ecf05399c806e10ee8dfde427cfe6aff84cacacb75",
+              "8b78f7325d842ad08637192efdbe564651439413a9d2d68684a7e8dcc698cc47",
+              "a4b66cf2a2d9889ece43f6cc930c3294a6118173b409398853b3063d66a81ec2",
+              "f535b2088c4d9ad4a81ef505e4e83012d26eeacc510d682ab93b5f2d3e29981a",
+              "821bd11693bf4b4b2b9f3c196036e1f4902abd95fb26873ea6c43e123b8c9431",
+              "ada6a50f5095cd88c4a19b7f05a0a6a5c95f6fe7c13731394b807d0686b5acaf",
+              "3d0041832e8b6f5b95cb33d286c24c53ccc9341549589ae8822c6084e8d2aa5c",
+              "0a16633bedf096c56cef9199b6da9cdc5cf1c01ee44c821528b92dd5a91cf1bd",
+              "af483a6e34a9b12ed2adcdb388b50311e5c322947718a41bbc325c2d1f3a7393",
+              "38669786d00f8e21119fea05167775b3f2035439e2a8374957e42052b6896fe0",
+              "8eb1e2a08f299b7c7c53e03e2121d5fd073b32791092f783feb5c00a8d6f1781",
+              "978123c86b1cbc981770fbd8bdfc58ef4030f8d9b3adf06b71b928cc0394c073",
+              "d06598f2f203cec7a7a3857f727bc2ba457c1c0cef2787b90ce553407fbf8536",
+              "8a8d94b58aa3443b57c917ca0650ae6befe0bc293a2333ddf9bb45fb2485203c",
+              "b8416acb067cae9a6a04cf31c5c98c2ef72a4d2efda715b44fb76f62fcddf788",
+              "13a5adab078ceaefea89d2058e81d6cac41f3732d1f246bd4de6c4a0bd656d0f") and
+  not process.executable : "?:\\Program Files (x86)\\LAN Messenger\\lmc.exe"
+ ]
+ [any where event.category : ("registry", "file") and event.action != "deletion" and
+   (
+    (registry.data.strings != null and
+     registry.path :
+                ("H*\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\*",
+		 "H*\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run\\*",
+		 "H*\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\Run\\*",
+		 "H*\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\Run\\*", 
+		 "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows\\Load",
+		 "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Shell",
+		 "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Shell",
+		 "HKEY_USERS\\*\\Environment\\UserInitMprLogonScript",
+		 "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Userinit",
+		 "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Shell",
+		 "HKEY_USERS\\*\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\\Scripts\\Logoff\\Script",
+		 "HKEY_USERS\\*\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\\Scripts\\Logon\\Script",
+		 "HKEY_USERS\\*\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\\Scripts\\Shutdown\\Script",
+		 "HKEY_USERS\\*\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\\Scripts\\Startup\\Script",
+		 "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Ctf\\LangBarAddin\\*\\FilePath",
+		 "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Internet Explorer\\Extensions\\*\\Exec",
+		 "HKEY_USERS\\*\\SOFTWARE\\Microsoft\\Command Processor\\Autorun")) or
+    (file.name != null and file.path : "?:\\*\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\*")
+   )]
+'''
+
+min_endpoint_version = "8.4.0"
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[optional_actions]]
+action = "rollback"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1547"
+name = "Boot or Logon Autostart Execution"
+reference = "https://attack.mitre.org/techniques/T1547/"
+[[threat.technique.subtechnique]]
+id = "T1547.001"
+name = "Registry Run Keys / Startup Folder"
+reference = "https://attack.mitre.org/techniques/T1547/001/"
+
+
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+
+[internal]
+min_endpoint_version = "8.4.0"
